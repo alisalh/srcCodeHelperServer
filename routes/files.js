@@ -5,6 +5,7 @@ var path = require('path');
 const EventEmitter = require('events');
 var dependencyTree = require('dependency-tree')
 let _ = require("underscore")
+const vueSrc='/Users/wendahuang/Desktop/vue/';
 // console.log(pathInfo)
 // console.log(pathInfo)
 /* GET home page. */
@@ -155,11 +156,21 @@ function extractModuleDep(deps) {
     return moduleDeps
 }
 
+//get 'deps'
+router.get('getFileInfo', function(req, res, next) {
+    let arr = []
+    let tree = dependencyTree({
+        filename: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\platforms\\web\\entry-runtime-with-compiler.js',
+        directory: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue',
+        webpackConfig: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\vuePackConfig.js', // optional
+        nonExistent: arr // optional
+    });
+
+
+})
 
 router.get('/getFolderHierarchy', function(req, res, next) {
-    var srcDir = 'E:\\srcCodeHelper\\node_modules\\vue\\src',
-        fileInfo = []
-    let directory = 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src'
+    let directory = path.resolve(vueSrc,'src')
     let root = {
         name: directory,
         type: 'dir',
@@ -172,19 +183,6 @@ router.get('/getFolderHierarchy', function(req, res, next) {
     equalizeDepth(root, depth)
     res.send(root)
 });
-
-//get 'deps'
-router.get('getFileInfo', function(req, res, next) {
-    let arr=[]
-    let tree = dependencyTree({
-        filename: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\platforms\\web\\entry-runtime-with-compiler.js',
-        directory: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue',
-        webpackConfig: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\vuePackConfig.js', // optional
-        nonExistent: arr // optional
-    });
-    
-
-})
 
 router.get('/getBadDeps', function(req, res, next) {
     let curPath = [],
@@ -200,9 +198,9 @@ router.get('/getBadDeps', function(req, res, next) {
     lenTreshold = req.query.lenTreshold,
         depIdx = 0
     let tree = dependencyTree({
-        filename: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\platforms\\web\\entry-runtime-with-compiler.js',
-        directory: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue',
-        webpackConfig: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\vuePackConfig.js', // optional
+        filename: path.resolve(vueSrc,'src/platforms/web/entry-runtime-with-compiler.js'),
+        directory: path.resolve(vueSrc),
+        webpackConfig: path.resolve(vueSrc,'src/vuePackConfig.js'), // optional
         nonExistent: arr // optional
     });
     findRing(Object.keys(tree)[0], tree[Object.keys(tree)[0]])
@@ -241,19 +239,20 @@ router.get('/getBadDeps', function(req, res, next) {
 
 let blackList = ['.DS_Store']
 
-function readDirSync(path, root) {
-    var pa = fs.readdirSync(path);
+function readDirSync(rootPath, root) {
+    var pa = fs.readdirSync(rootPath);
     pa.forEach(function(ele, index) {
         // console.log(ele)
         if (blackList.indexOf(ele) !== -1) return
-        var info = fs.statSync(path + "\\" + ele)
+
+        var curPath=path.resolve(rootPath,ele),info = fs.statSync(curPath)
         if (info.isDirectory()) {
             // console.log("dir: "+ele) 
-            let tmpdir = { name: path + "\\" + ele, children: [], type: 'dir' }
+            let tmpdir = { name: curPath, children: [], type: 'dir' }
             root.children.push(tmpdir)
-            readDirSync(path + "\\" + ele, tmpdir);
+            readDirSync(curPath, tmpdir);
         } else {
-            root.children.push({ name: path + "\\" + ele, size: info.size, type: 'file' })
+            root.children.push({ name: curPath, size: info.size, type: 'file' })
             // console.log("file: "+ele)  
         }
     })
