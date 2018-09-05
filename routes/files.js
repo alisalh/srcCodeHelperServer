@@ -2,10 +2,12 @@ var express = require('express');
 var router = express.Router();
 var fs = require('fs');
 var path = require('path');
+const babelTraverse = require("@babel/traverse").default;
+const babelParser = require("@babel/parser")
 const EventEmitter = require('events');
 var dependencyTree = require('dependency-tree')
 let _ = require("underscore")
-const vueSrc='/Users/wendahuang/Desktop/vue/';
+const vueSrc = '/Users/wendahuang/Desktop/vue/';
 // console.log(pathInfo)
 // console.log(pathInfo)
 /* GET home page. */
@@ -170,7 +172,7 @@ router.get('getFileInfo', function(req, res, next) {
 })
 
 router.get('/getFolderHierarchy', function(req, res, next) {
-    let directory = path.resolve(vueSrc,'src')
+    let directory = path.resolve(vueSrc, 'src')
     let root = {
         name: directory,
         type: 'dir',
@@ -197,10 +199,17 @@ router.get('/getBadDeps', function(req, res, next) {
         longestPathLen = -1
     lenTreshold = req.query.lenTreshold,
         depIdx = 0
+    /**
+     * 依赖树数据结构
+     * {
+     *     a{}
+     *     c{}
+     * }
+     */
     let tree = dependencyTree({
-        filename: path.resolve(vueSrc,'src/platforms/web/entry-runtime-with-compiler.js'),
+        filename: path.resolve(vueSrc, 'src/platforms/web/entry-runtime-with-compiler.js'),
         directory: path.resolve(vueSrc),
-        webpackConfig: path.resolve(vueSrc,'src/vuePackConfig.js'), // optional
+        webpackConfig: path.resolve(vueSrc, 'src/vuePackConfig.js'), // optional
         nonExistent: arr // optional
     });
     findRing(Object.keys(tree)[0], tree[Object.keys(tree)[0]])
@@ -234,7 +243,11 @@ router.get('/getBadDeps', function(req, res, next) {
         }
         curPath.pop()
     }
-    res.send([{ type: 'long', paths: longPaths, threshold: lenTreshold, longestPathLen }, { type: 'indirect', paths: indirectCirclePaths }, { type: 'direct', paths: directCirclePaths }])
+    res.send([{ type: 'long', paths: longPaths, threshold: lenTreshold, longestPathLen },
+        { type: 'indirect', paths: indirectCirclePaths },
+        { type: 'direct', paths: directCirclePaths },
+        { type: 'scc', paths: [] }
+    ])
 });
 
 let blackList = ['.DS_Store']
@@ -245,17 +258,44 @@ function readDirSync(rootPath, root) {
         // console.log(ele)
         if (blackList.indexOf(ele) !== -1) return
 
-        var curPath=path.resolve(rootPath,ele),info = fs.statSync(curPath)
+        var curPath = path.resolve(rootPath, ele),
+            info = fs.statSync(curPath)
         if (info.isDirectory()) {
             // console.log("dir: "+ele) 
             let tmpdir = { name: curPath, children: [], type: 'dir' }
             root.children.push(tmpdir)
             readDirSync(curPath, tmpdir);
         } else {
-            root.children.push({ name: curPath, size: info.size, type: 'file' })
+            root.children.push({ name: curPath, size: info.size, type: 'file', fileInfo: getFileInfo(curPath) })
             // console.log("file: "+ele)  
         }
     })
+}
+
+function getFileInfo(fpath) {
+    const code = fs.readFileSync(fpath, "utf-8"),
+        fileInfo = {},
+        ast = babelParser.parse(code, {
+            // parse in strict mode and allow module declarations
+            sourceType: "module",
+            plugins: [
+                // enable jsx and flow syntax
+                "flow"
+            ]
+        }),
+        visitor = {
+            FunctionDeclaration(path) {
+                fileInfo.func || (fileInfo.func = []);
+                const loc = path.node.loc
+                fileInfo.func.push({
+                    lineNum: loc.end.line - loc.start.line + 1,
+                    name: path.node.id.name
+                })
+            }
+        }
+
+    babelTraverse(ast, visitor);
+    return fileInfo;
 }
 
 function getTreeDepth(root) {
