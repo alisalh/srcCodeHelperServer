@@ -171,22 +171,17 @@ router.get('getFileInfo', function(req, res, next) {
 
 })
 
-router.get('/getFolderHierarchy', function(req, res, next) {
-    let directory = path.resolve(vueSrc, 'src')
-    let root = {
-        name: directory,
-        type: 'dir',
-        children: []
-    }
+router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
+    const lenTreshold = req.query.lenTreshold,
+        { badDeps, fileDep } = getDepInfo(lenTreshold)
+    console.log(lenTreshold)
+    const root = getFileInfo(badDeps, fileDep)
+    res.send({ root, badDeps })
 
-    readDirSync(directory, root)
-    let depth = getTreeDepth(root)
-    // console.log(depth)
-    equalizeDepth(root, depth)
-    res.send(root)
 });
 
-router.get('/getBadDeps', function(req, res, next) {
+// 返回文件的依赖信息：三种坏依赖关系数组，每个文件的依赖和被依赖文件数组
+function getDepInfo(lenTreshold) {
     let curPath = [],
         // lenTreshold = 22,
         longPaths = [],
@@ -196,8 +191,8 @@ router.get('/getBadDeps', function(req, res, next) {
         longPathSet = new Set(),
         directCirclePathSet = new Set(),
         indirectCirclePathSet = new Set(),
-        longestPathLen = -1
-    lenTreshold = req.query.lenTreshold,
+        longestPathLen = -1,
+        fileInfoMap = {},
         depIdx = 0
     /**
      * 依赖树数据结构
@@ -212,13 +207,20 @@ router.get('/getBadDeps', function(req, res, next) {
         webpackConfig: path.resolve(vueSrc, 'src/vuePackConfig.js'), // optional
         nonExistent: arr // optional
     });
-    findRing(Object.keys(tree)[0], tree[Object.keys(tree)[0]])
+    traverse(Object.keys(tree)[0], tree[Object.keys(tree)[0]], null)
     directCirclePaths = [...directCirclePathSet].map(d => ({ id: depIdx++, path: d.split('|'), type: 'direct' }))
     indirectCirclePaths = [...indirectCirclePathSet].map(d => ({ id: depIdx++, path: d.split('|'), type: 'indirect' }))
     longPaths = [...longPathSet].map(d => ({ id: depIdx++, path: d.split('|'), type: 'long' }))
 
-    function findRing(key, val) {
-        curPath.push(key)
+    function traverse(cur, val, prev) {
+        if (prev !== null) {
+            // 获取文件的依赖和被依赖文件信息，prev->cur表示prev依赖于cur
+            fileInfoMap[cur] || (fileInfoMap[cur] = fileFactory())
+            fileInfoMap[prev] || (fileInfoMap[prev] = fileFactory())
+            fileInfoMap[cur].dependedArr.push(prev)
+            fileInfoMap[prev].dependedArr.push(cur)
+        }
+        curPath.push(cur)
         if (Object.keys(val).length === 0) {
             let tmpPath = curPath.slice()
             // a circle is detected if the last number happens before
@@ -239,40 +241,70 @@ router.get('/getBadDeps', function(req, res, next) {
             }
         }
         for (let key of Object.keys(val)) {
-            findRing(key, val[key])
+            traverse(key, val[key], cur)
         }
         curPath.pop()
     }
-    res.send([{ type: 'long', paths: longPaths, threshold: lenTreshold, longestPathLen },
-        { type: 'indirect', paths: indirectCirclePaths },
-        { type: 'direct', paths: directCirclePaths },
-        { type: 'scc', paths: [] }
-    ])
-});
-
-let blackList = ['.DS_Store']
-
-function readDirSync(rootPath, root) {
-    var pa = fs.readdirSync(rootPath);
-    pa.forEach(function(ele, index) {
-        // console.log(ele)
-        if (blackList.indexOf(ele) !== -1) return
-
-        var curPath = path.resolve(rootPath, ele),
-            info = fs.statSync(curPath)
-        if (info.isDirectory()) {
-            // console.log("dir: "+ele) 
-            let tmpdir = { name: curPath, children: [], type: 'dir' }
-            root.children.push(tmpdir)
-            readDirSync(curPath, tmpdir);
-        } else {
-            root.children.push({ name: curPath, size: info.size, type: 'file', fileInfo: getFileInfo(curPath) })
-            // console.log("file: "+ele)  
-        }
-    })
+    return {
+        badDeps: [{ type: 'long', paths: longPaths, threshold: lenTreshold, longestPathLen },
+            { type: 'indirect', paths: indirectCirclePaths },
+            { type: 'direct', paths: directCirclePaths },
+            { type: 'scc', paths: [] }
+        ],
+        fileDep: fileInfoMap
+    }
 }
 
-function getFileInfo(fpath) {
+function fileFactory() {
+    return {
+        dependingArr: [],
+        dependedArr: []
+    }
+}
+
+// 返回文件夹的层次结构，以及文件的基本统计信息（文件大小、文件所包含函数、依赖和被依赖文件，坏依赖数）
+function getFileInfo(badDeps, fileDep) {
+    let directory = path.resolve(vueSrc, 'src'),
+        root = {
+            name: directory,
+            type: 'dir',
+            children: []
+        },
+        blackList = ['.DS_Store']
+    readDirSync(directory, root)
+    let depth = getTreeDepth(root)
+    // console.log(depth)
+    equalizeDepth(root, depth)
+    return root
+
+    function readDirSync(rootPath, root) {
+        var pa = fs.readdirSync(rootPath);
+        pa.forEach(function(ele, index) {
+            // console.log(ele)
+            if (blackList.indexOf(ele) !== -1) return
+            var curPath = path.resolve(rootPath, ele),
+                info = fs.statSync(curPath)
+            if (info.isDirectory()) {
+                // console.log("dir: "+ele)
+                let tmpdir = { name: curPath, children: [], type: 'dir' }
+                root.children.push(tmpdir)
+                readDirSync(curPath, tmpdir);
+            } else {
+                root.children.push({
+                    name: curPath,
+                    type: 'file',
+                    fileInfo: Object.assign({}, { size: info.size },
+                        extractFunc(curPath),
+                        extractBadDeps(curPath, badDeps),
+                        extractFileDep(curPath, fileDep))
+                })
+                // console.log("file: "+ele)  
+            }
+        })
+    }
+}
+
+function extractFunc(fpath) {
     const code = fs.readFileSync(fpath, "utf-8"),
         fileInfo = {},
         ast = babelParser.parse(code, {
@@ -296,6 +328,27 @@ function getFileInfo(fpath) {
 
     babelTraverse(ast, visitor);
     return fileInfo;
+}
+
+function extractBadDeps(fpath, badDeps) {
+    const fileBadDeps = {}
+    console.log(fpath)
+    for (let dep of badDeps) {
+        let type = dep.type,
+            paths = dep.paths,
+            filteredDeps = paths.filter(d => d.path.indexOf(fpath) !== -1)
+        fileBadDeps[`${type}-paths`] = filteredDeps
+        fileBadDeps[`${type}-count`] = filteredDeps.length
+    }
+    return {
+        fileBadDeps
+    }
+}
+
+function extractFileDep(fpath, fileDep) {
+    return {
+        fileDep: fileDep[fpath]
+    }
 }
 
 function getTreeDepth(root) {
