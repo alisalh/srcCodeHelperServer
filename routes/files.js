@@ -174,7 +174,6 @@ router.get('getFileInfo', function(req, res, next) {
 router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
     const lenTreshold = req.query.lenTreshold,
         { badDeps, fileDep } = getDepInfo(lenTreshold)
-    console.log(lenTreshold)
     const root = getFileInfo(badDeps, fileDep)
     res.send({ root, badDeps })
 
@@ -217,8 +216,8 @@ function getDepInfo(lenTreshold) {
             // 获取文件的依赖和被依赖文件信息，prev->cur表示prev依赖于cur
             fileInfoMap[cur] || (fileInfoMap[cur] = fileFactory())
             fileInfoMap[prev] || (fileInfoMap[prev] = fileFactory())
-            fileInfoMap[cur].dependedArr.push(prev)
-            fileInfoMap[prev].dependedArr.push(cur)
+            fileInfoMap[cur].depended.add(prev)
+            fileInfoMap[prev].depending.add(cur)
         }
         curPath.push(cur)
         if (Object.keys(val).length === 0) {
@@ -257,8 +256,8 @@ function getDepInfo(lenTreshold) {
 
 function fileFactory() {
     return {
-        dependingArr: [],
-        dependedArr: []
+        depending: new Set(),
+        depended: new Set()
     }
 }
 
@@ -306,7 +305,7 @@ function getFileInfo(badDeps, fileDep) {
 
 function extractFunc(fpath) {
     const code = fs.readFileSync(fpath, "utf-8"),
-        fileInfo = {},
+        fileInfo = { func: [] },
         ast = babelParser.parse(code, {
             // parse in strict mode and allow module declarations
             sourceType: "module",
@@ -317,7 +316,6 @@ function extractFunc(fpath) {
         }),
         visitor = {
             FunctionDeclaration(path) {
-                fileInfo.func || (fileInfo.func = []);
                 const loc = path.node.loc
                 fileInfo.func.push({
                     lineNum: loc.end.line - loc.start.line + 1,
@@ -332,23 +330,26 @@ function extractFunc(fpath) {
 
 function extractBadDeps(fpath, badDeps) {
     const fileBadDeps = {}
-    console.log(fpath)
     for (let dep of badDeps) {
         let type = dep.type,
             paths = dep.paths,
             filteredDeps = paths.filter(d => d.path.indexOf(fpath) !== -1)
-        fileBadDeps[`${type}-paths`] = filteredDeps
-        fileBadDeps[`${type}-count`] = filteredDeps.length
+        fileBadDeps[type] = filteredDeps
     }
-    return {
-        fileBadDeps
+    return fileBadDeps
+}
+
+function set2ArrInObj(obj){
+    let keys=Object.keys(obj)
+    for(let i=0;i<keys.length;i++){
+        const key=keys[i]
+        obj[key]=Array.from(obj[key])
     }
+    return obj
 }
 
 function extractFileDep(fpath, fileDep) {
-    return {
-        fileDep: fileDep[fpath]
-    }
+    return fileDep[fpath] ? set2ArrInObj(fileDep[fpath]) : set2ArrInObj(fileFactory())
 }
 
 function getTreeDepth(root) {
