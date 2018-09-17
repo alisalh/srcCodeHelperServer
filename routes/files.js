@@ -196,7 +196,10 @@ function getDepInfo(lenTreshold) {
     /**
      * 依赖树数据结构
      * {
-     *     a{}
+     *     a{
+     *         specifiers
+     *         b{specifiers}
+     *     }
      *     c{}
      * }
      */
@@ -206,21 +209,39 @@ function getDepInfo(lenTreshold) {
         webpackConfig: path.resolve(vueSrc, 'src/vuePackConfig.js'), // optional
         nonExistent: arr // optional
     });
-    traverse(Object.keys(tree)[0], tree[Object.keys(tree)[0]], null)
+    // console.log(tree)
+    traverse(Object.keys(tree)[0], null, tree[Object.keys(tree)[0]])
     directCirclePaths = [...directCirclePathSet].map(d => ({ id: depIdx++, path: d.split('|'), type: 'direct' }))
     indirectCirclePaths = [...indirectCirclePathSet].map(d => ({ id: depIdx++, path: d.split('|'), type: 'indirect' }))
     longPaths = [...longPathSet].map(d => ({ id: depIdx++, path: d.split('|'), type: 'long' }))
 
-    function traverse(cur, val, prev) {
+    function traverse(cur, prev, val) {
+        if (!val) {
+            console.log('cur', cur)
+            console.log('prev', prev)
+            console.log('val', val)
+            return
+        }
+        const childKey = Object.keys(val).filter(d => d !== 'specifiers')
         if (prev !== null) {
+/*            console.log({
+                file: prev,
+                specifiers: val.specifiers
+            })*/
             // 获取文件的依赖和被依赖文件信息，prev->cur表示prev依赖于cur
             fileInfoMap[cur] || (fileInfoMap[cur] = fileFactory())
             fileInfoMap[prev] || (fileInfoMap[prev] = fileFactory())
-            fileInfoMap[cur].depended.add(prev)
-            fileInfoMap[prev].depending.add(cur)
+            fileInfoMap[cur].depended.add(JSON.stringify({
+                file: prev,
+                specifiers: val.specifiers
+            }))
+            fileInfoMap[prev].depending.add(JSON.stringify({
+                file: cur,
+                specifiers: val.specifiers
+            }))
         }
         curPath.push(cur)
-        if (Object.keys(val).length === 0) {
+        if (childKey.length === 0) {
             let tmpPath = curPath.slice()
             // a circle is detected if the last number happens before
             // note that the circle path doesnt connect the last node to the first node
@@ -239,8 +260,8 @@ function getDepInfo(lenTreshold) {
                 }
             }
         }
-        for (let key of Object.keys(val)) {
-            traverse(key, val[key], cur)
+        for (let key of childKey) {
+            traverse(key, cur, val[key])
         }
         curPath.pop()
     }
@@ -339,11 +360,11 @@ function extractBadDeps(fpath, badDeps) {
     return fileBadDeps
 }
 
-function set2ArrInObj(obj){
-    let keys=Object.keys(obj)
-    for(let i=0;i<keys.length;i++){
-        const key=keys[i]
-        obj[key]=Array.from(obj[key])
+function set2ArrInObj(obj) {
+    let keys = Object.keys(obj)
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        obj[key] = Array.from(obj[key]).map((d)=>JSON.parse(d))
     }
     return obj
 }
