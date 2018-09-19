@@ -197,7 +197,13 @@ function getDepInfo(lenTreshold) {
      * 依赖树数据结构
      * {
      *     a{
-     *         specifiers
+     *         specifiers{
+     *             depending:[{
+     *                 type:ImportSpecifier|ImportDefaultSpecifier|ImportNamespaceSpecifier|ExportSpecifier|ExportAllSpecifier,
+     *                 name
+     *             }],
+     *             depended:
+     *         }
      *         b{specifiers}
      *     }
      *     c{}
@@ -229,6 +235,12 @@ function getDepInfo(lenTreshold) {
                 specifiers: val.specifiers
             })*/
             // 获取文件的依赖和被依赖文件信息，prev->cur表示prev依赖于cur
+            if(prev==='/Users/wendahuang/Desktop/vue/src/core/util/index.js' && 
+                cur==='/Users/wendahuang/Desktop/vue/src/core/observer/index.js'){
+                console.log(prev,cur)
+                console.log('------------')
+                console.log(JSON.stringify(val.specifiers,null,1))
+            }
             fileInfoMap[cur] || (fileInfoMap[cur] = fileFactory())
             fileInfoMap[prev] || (fileInfoMap[prev] = fileFactory())
             fileInfoMap[cur].depended.add(JSON.stringify({
