@@ -173,117 +173,37 @@ router.get('getFileInfo', function(req, res, next) {
 
 router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
     const lenTreshold = req.query.lenTreshold,
-        { badDeps, fileDep } = getDepInfo(lenTreshold)
-    const root = getFileInfo(badDeps, fileDep)
-    res.send({ root, badDeps })
+        { badDeps, depMap } = getDepInfo(lenTreshold)
+    // const root = getFileInfo(badDeps, fileDep)
+    // res.send({ root, badDeps })
+    res.send({
+        badDeps,
+        depMap
+    })
 
 });
 
-// 返回文件的依赖信息：三种坏依赖关系数组，每个文件的依赖和被依赖文件数组
+// 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
 function getDepInfo(lenTreshold) {
-    let curPath = [],
-        // lenTreshold = 22,
-        longPaths = [],
-        directCirclePaths = [],
-        indirectCirclePaths = [],
-        arr = [],
-        longPathSet = new Set(),
-        directCirclePathSet = new Set(),
-        indirectCirclePathSet = new Set(),
-        longestPathLen = -1,
-        fileInfoMap = {},
-        depIdx = 0
-    /**
-     * 依赖树数据结构
-     * {
-     *     a{
-     *         specifiers{
-     *             depending:[{
-     *                 type:ImportSpecifier|ImportDefaultSpecifier|ImportNamespaceSpecifier|ExportSpecifier|ExportAllSpecifier,
-     *                 name
-     *             }],
-     *             depended:
-     *         }
-     *         b{specifiers}
-     *     }
-     *     c{}
-     * }
-     */
-    let tree = dependencyTree({
-        filename: path.resolve(vueSrc, 'src/platforms/web/entry-runtime-with-compiler.js'),
-        directory: path.resolve(vueSrc),
-        webpackConfig: path.resolve(vueSrc, 'src/vuePackConfig.js'), // optional
-        nonExistent: arr // optional
-    });
-    // console.log(tree)
-    traverse(Object.keys(tree)[0], null, tree[Object.keys(tree)[0]])
-    directCirclePaths = [...directCirclePathSet].map(d => ({ id: depIdx++, path: d.split('|'), type: 'direct' }))
-    indirectCirclePaths = [...indirectCirclePathSet].map(d => ({ id: depIdx++, path: d.split('|'), type: 'indirect' }))
-    longPaths = [...longPathSet].map(d => ({ id: depIdx++, path: d.split('|'), type: 'long' }))
+    let arr = [],
+        maxLen = -1,
+        depMapInfo = new dependencyTree({
+            filename: path.resolve(vueSrc, 'src/platforms/web/entry-runtime-with-compiler.js'),
+            directory: path.resolve(vueSrc),
+            webpackConfig: path.resolve(vueSrc, 'src/vuePackConfig.js'), // optional
+            nonExistent: arr, // optional
+            lenTreshold
+        })
+    console.log('after depMapInfo')
+    maxLen = depMapInfo.depHell.long.slice().sort((a, b) => b.length - a.length)[0].length
 
-    function traverse(cur, prev, val) {
-        if (!val) {
-            console.log('cur', cur)
-            console.log('prev', prev)
-            console.log('val', val)
-            return
-        }
-        const childKey = Object.keys(val).filter(d => d !== 'specifiers')
-        if (prev !== null) {
-/*            console.log({
-                file: prev,
-                specifiers: val.specifiers
-            })*/
-            // 获取文件的依赖和被依赖文件信息，prev->cur表示prev依赖于cur
-            if(prev==='/Users/wendahuang/Desktop/vue/src/core/util/index.js' && 
-                cur==='/Users/wendahuang/Desktop/vue/src/core/observer/index.js'){
-                console.log(prev,cur)
-                console.log('------------')
-                console.log(JSON.stringify(val.specifiers,null,1))
-            }
-            fileInfoMap[cur] || (fileInfoMap[cur] = fileFactory())
-            fileInfoMap[prev] || (fileInfoMap[prev] = fileFactory())
-            fileInfoMap[cur].depended.add(JSON.stringify({
-                file: prev,
-                specifiers: val.specifiers
-            }))
-            fileInfoMap[prev].depending.add(JSON.stringify({
-                file: cur,
-                specifiers: val.specifiers
-            }))
-        }
-        curPath.push(cur)
-        if (childKey.length === 0) {
-            let tmpPath = curPath.slice()
-            // a circle is detected if the last number happens before
-            // note that the circle path doesnt connect the last node to the first node
-            let idx = tmpPath.indexOf(tmpPath[tmpPath.length - 1])
-            if (idx !== tmpPath.length - 1) {
-                tmpPath = tmpPath.slice(idx, tmpPath.length - 1)
-                if (tmpPath.length === 2)
-                    directCirclePathSet.add(tmpPath.join("|")) //'|' is used to  serve as the delimiter for join and split
-                else if (tmpPath.length > 2)
-                    indirectCirclePathSet.add(tmpPath.join("|"))
-            } else {
-                if (tmpPath.length > longestPathLen)
-                    longestPathLen = tmpPath.length
-                if (tmpPath.length > lenTreshold) {
-                    longPathSet.add(tmpPath.join("|"))
-                }
-            }
-        }
-        for (let key of childKey) {
-            traverse(key, cur, val[key])
-        }
-        curPath.pop()
-    }
     return {
-        badDeps: [{ type: 'long', paths: longPaths, threshold: lenTreshold, longestPathLen },
-            { type: 'indirect', paths: indirectCirclePaths },
-            { type: 'direct', paths: directCirclePaths },
+        badDeps: [{ type: 'long', paths: depMapInfo.depHell.long, threshold: lenTreshold, maxLen },
+            { type: 'indirect', paths: depMapInfo.depHell.indirect },
+            { type: 'direct', paths: depMapInfo.depHell.direct },
             { type: 'scc', paths: [] }
         ],
-        fileDep: fileInfoMap
+        depMap: depMapInfo.depMap
     }
 }
 
@@ -376,7 +296,7 @@ function set2ArrInObj(obj) {
     let keys = Object.keys(obj)
     for (let i = 0; i < keys.length; i++) {
         const key = keys[i]
-        obj[key] = Array.from(obj[key]).map((d)=>JSON.parse(d))
+        obj[key] = Array.from(obj[key]).map((d) => JSON.parse(d))
     }
     return obj
 }
