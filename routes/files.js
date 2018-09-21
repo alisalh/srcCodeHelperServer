@@ -8,41 +8,17 @@ const EventEmitter = require('events');
 var dependencyTree = require('dependency-tree')
 let _ = require("underscore")
 const vueSrc = '/Users/wendahuang/Desktop/vue/';
-// console.log(pathInfo)
-// console.log(pathInfo)
-/* GET home page. */
+
 router.get('/', function(req, res, next) {
     res.render('index', { title: 'Express' });
 });
 
-//get 'deps'
-router.get('/getFileInfo', function(req, res, next) {
-    let arr = []
-    /*    let tree = dependencyTree({
-            filename: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\platforms\\web\\entry-runtime-with-compiler.js',
-            directory: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue',
-            webpackConfig: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\vuePackConfig.js', // optional
-            nonExistent: arr // optional
-        });*/
-    let obj = { a: { name: 5 }, b: [1, 2, 3] }
-    console.log(process.cwd(), __dirname)
-    fs.writeFile(path.join(__dirname, '../data/vue_treeMap.json'), JSON.stringify(obj, null, 2), function(err) {
-        if (err) throw err;
-        console.log('写文件成功');
-    });
-    res.send(obj)
-})
 
 router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
     const lenTreshold = req.query.lenTreshold,
         depInfo = getDepInfo(lenTreshold)
-    // const root = getFileInfo(depInfo)
-    // res.send({ root, badDeps })
-    /*    res.send({
-            badDeps,
-            depMap
-        })*/
-    res.send(depInfo)
+    const root = getFileInfo(depInfo)
+    res.send({ root, badDeps:depInfo.badDeps })
 });
 
 // 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
@@ -56,7 +32,6 @@ function getDepInfo(lenTreshold) {
             nonExistent: arr, // optional
             lenTreshold
         })
-    console.log('after depMapInfo')
     maxLen = depMapInfo.depHell.long.slice().sort((a, b) => b.length - a.length)[0].length
 
     return {
@@ -69,12 +44,6 @@ function getDepInfo(lenTreshold) {
     }
 }
 
-function fileFactory() {
-    return {
-        depending: new Set(),
-        depended: new Set()
-    }
-}
 
 // 返回文件夹的层次结构，以及文件的基本统计信息（文件大小、文件所包含函数、依赖和被依赖文件，坏依赖数）
 function getFileInfo({badDeps, depMap}) {
@@ -154,18 +123,23 @@ function extractBadDeps(fpath, badDeps) {
     return fileBadDeps
 }
 
-function set2ArrInObj(obj) {
-    let keys = Object.keys(obj)
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i]
-        obj[key] = Array.from(obj[key]).map((d) => JSON.parse(d))
-    }
-    return obj
-}
-
 function extractFileDep(fpath, depMap) {
-    let depending=123;
-    // return fileDep[fpath] ? set2ArrInObj(fileDep[fpath]) : set2ArrInObj(fileFactory())
+    let depending=[],depended=[],val,idx;
+    depending=depMap[fpath]
+    Object.keys(depMap).forEach((key)=>{
+        val=depMap[key]
+        idx=val.findIndex(d=>d.src===fpath)
+        if(idx!==-1){
+            depended.push({
+                src:d.src,
+                specifiers:d.specifiers
+            })
+        }
+    })
+    return{
+        depending,
+        depended
+    }
 }
 
 function getTreeDepth(root) {
