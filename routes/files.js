@@ -15,14 +15,15 @@ router.get('/', function(req, res, next) {
 
 
 router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
-    const lenTreshold = req.query.lenTreshold,
-        depInfo = getDepInfo(lenTreshold)
+    const lenThreshold = req.query.lenThreshold,
+        depInfo = getDepInfo(lenThreshold)
+    // res.send({depInfo})
     const root = getFileInfo(depInfo)
-    res.send({ root, badDeps:depInfo.badDeps })
+    res.send({ root, badDeps: depInfo.badDeps })
 });
 
 // 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
-function getDepInfo(lenTreshold) {
+function getDepInfo(lenThreshold) {
     let arr = [],
         maxLen = -1,
         depMapInfo = new dependencyTree({
@@ -30,23 +31,30 @@ function getDepInfo(lenTreshold) {
             directory: path.resolve(vueSrc),
             webpackConfig: path.resolve(vueSrc, 'src/vuePackConfig.js'), // optional
             nonExistent: arr, // optional
-            lenTreshold
+            lenThreshold
         })
     maxLen = depMapInfo.depHell.long.slice().sort((a, b) => b.length - a.length)[0].length
-
     return {
-        badDeps: [{ type: 'long', paths: depMapInfo.depHell.long, threshold: lenTreshold, maxLen },
-            { type: 'indirect', paths: depMapInfo.depHell.indirect },
-            { type: 'direct', paths: depMapInfo.depHell.direct },
+        badDeps: [{ type: 'long', paths: backWardsCompat(depMapInfo.depHell.long, 0, 'long'), threshold: lenThreshold, maxLen },
+            { type: 'indirect', paths: backWardsCompat(depMapInfo.depHell.indirect, depMapInfo.depHell.long.length, 'indirect') },
+            { type: 'direct', paths: backWardsCompat(depMapInfo.depHell.direct, depMapInfo.depHell.indirect.length, 'direct') },
             { type: 'scc', paths: [] }
         ],
         depMap: depMapInfo.depMap
     }
 }
 
+// 对用新逻辑获取的badDeps进行向后接口的兼容
+function backWardsCompat(deps, offset, type) {
+    return deps.map((d) => ({
+        id: offset++,
+        path: d,
+        type
+    }))
+}
 
 // 返回文件夹的层次结构，以及文件的基本统计信息（文件大小、文件所包含函数、依赖和被依赖文件，坏依赖数）
-function getFileInfo({badDeps, depMap}) {
+function getFileInfo({ badDeps, depMap }) {
     let directory = path.resolve(vueSrc, 'src'),
         root = {
             name: directory,
@@ -58,6 +66,7 @@ function getFileInfo({badDeps, depMap}) {
     let depth = getTreeDepth(root)
     // console.log(depth)
     equalizeDepth(root, depth)
+    console.log('getFileInfo done')
     return root
 
     function readDirSync(rootPath, root) {
@@ -79,7 +88,8 @@ function getFileInfo({badDeps, depMap}) {
                     fileInfo: Object.assign({}, { size: info.size },
                         extractFunc(curPath),
                         extractBadDeps(curPath, badDeps),
-                        extractFileDep(curPath, depMap))
+                        extractFileDep(curPath, depMap)
+                        )
                 })
                 // console.log("file: "+ele)
             }
@@ -124,19 +134,21 @@ function extractBadDeps(fpath, badDeps) {
 }
 
 function extractFileDep(fpath, depMap) {
-    let depending=[],depended=[],val,idx;
-    depending=depMap[fpath]
-    Object.keys(depMap).forEach((key)=>{
-        val=depMap[key]
-        idx=val.findIndex(d=>d.src===fpath)
-        if(idx!==-1){
+    let depending = [],
+        depended = [],
+        val, idx;
+    depending = depMap[fpath]
+    Object.keys(depMap).forEach((key) => {
+        val = depMap[key]
+        idx = val.findIndex(d => d.src === fpath)
+        if (idx !== -1) {
             depended.push({
-                src:d.src,
-                specifiers:d.specifiers
+                src: val[idx].src,
+                specifiers: val[idx].specifiers
             })
         }
     })
-    return{
+    return {
         depending,
         depended
     }
