@@ -159,28 +159,38 @@ function extractModuleDep(deps) {
 }
 
 //get 'deps'
-router.get('getFileInfo', function(req, res, next) {
+router.get('/getFileInfo', function(req, res, next) {
     let arr = []
-    let tree = dependencyTree({
-        filename: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\platforms\\web\\entry-runtime-with-compiler.js',
-        directory: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue',
-        webpackConfig: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\vuePackConfig.js', // optional
-        nonExistent: arr // optional
+    /*    let tree = dependencyTree({
+            filename: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\platforms\\web\\entry-runtime-with-compiler.js',
+            directory: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue',
+            webpackConfig: 'C:\\Users\\yunyou\\Desktop\\workspace\\node_modules\\vue\\src\\vuePackConfig.js', // optional
+            nonExistent: arr // optional
+        });*/
+    let obj = { a: { name: 5 }, b: [1, 2, 3] }
+    console.log(process.cwd(), __dirname)
+    fs.writeFile(path.join(__dirname, '../data/vue_treeMap.json'), JSON.stringify(obj, null, 2), function(err) {
+        if (err) throw err;
+        console.log('写文件成功');
     });
-
-
+    res.send(obj)
 })
 
 router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
     const lenTreshold = req.query.lenTreshold,
-        { badDeps, depMap } = getDepInfo(lenTreshold)
+        depInfo = getDepInfo(lenTreshold)
+
+    fs.writeFile(path.join(__dirname, '../data/vue_treeMap.json'), JSON.stringify(depInfo, null, 2), function(err) {
+        if (err) throw err;
+        console.log('写文件成功');
+    });
     // const root = getFileInfo(badDeps, fileDep)
     // res.send({ root, badDeps })
-    res.send({
-        badDeps,
-        depMap
-    })
-
+    /*    res.send({
+            badDeps,
+            depMap
+        })*/
+    res.send({})
 });
 
 // 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
@@ -215,7 +225,7 @@ function fileFactory() {
 }
 
 // 返回文件夹的层次结构，以及文件的基本统计信息（文件大小、文件所包含函数、依赖和被依赖文件，坏依赖数）
-function getFileInfo(badDeps, fileDep) {
+function getFileInfo(badDeps, depMap) {
     let directory = path.resolve(vueSrc, 'src'),
         root = {
             name: directory,
@@ -248,7 +258,7 @@ function getFileInfo(badDeps, fileDep) {
                     fileInfo: Object.assign({}, { size: info.size },
                         extractFunc(curPath),
                         extractBadDeps(curPath, badDeps),
-                        extractFileDep(curPath, fileDep))
+                        extractFileDep(curPath, depMap))
                 })
                 // console.log("file: "+ele)  
             }
