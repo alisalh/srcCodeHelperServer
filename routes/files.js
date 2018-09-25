@@ -66,7 +66,6 @@ function getFileInfo({ badDeps, depMap }) {
     let depth = getTreeDepth(root)
     // console.log(depth)
     equalizeDepth(root, depth)
-    console.log('getFileInfo done')
     return root
 
     function readDirSync(rootPath, root) {
@@ -134,10 +133,9 @@ function extractBadDeps(fpath, badDeps) {
 }
 
 function extractFileDep(fpath, depMap) {
-    let depending = [],
+    let depending = depMap[fpath]||[],
         depended = [],
         val, idx;
-    depending = depMap[fpath]
     Object.keys(depMap).forEach((key) => {
         val = depMap[key]
         idx = val.findIndex(d => d.src === fpath)
