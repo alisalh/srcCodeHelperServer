@@ -19,7 +19,7 @@ router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
         depInfo = getDepInfo(lenThreshold)
     // res.send({depInfo})
     const root = getFileInfo(depInfo)
-    res.send({ root, badDeps: depInfo.badDeps })
+    res.send({ root, badDeps: depInfo.badDeps, lenDis: depInfo.lenDis })
 });
 
 // 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
@@ -40,7 +40,8 @@ function getDepInfo(lenThreshold) {
             { type: 'direct', paths: backWardsCompat(depMapInfo.depHell.direct, depMapInfo.depHell.indirect.length, 'direct') },
             { type: 'scc', paths: [] }
         ],
-        depMap: depMapInfo.depMap
+        depMap: depMapInfo.depMap,
+        lenDis: depMapInfo.lenDis
     }
 }
 
@@ -88,7 +89,7 @@ function getFileInfo({ badDeps, depMap }) {
                         extractFunc(curPath),
                         extractBadDeps(curPath, badDeps),
                         extractFileDep(curPath, depMap)
-                        )
+                    )
                 })
                 // console.log("file: "+ele)
             }
@@ -133,7 +134,7 @@ function extractBadDeps(fpath, badDeps) {
 }
 
 function extractFileDep(fpath, depMap) {
-    let depending = depMap[fpath]||[],
+    let depending = depMap[fpath] || [],
         depended = [],
         val, idx;
     Object.keys(depMap).forEach((key) => {
