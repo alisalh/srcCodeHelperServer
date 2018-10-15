@@ -27,13 +27,15 @@ router.get('/getDetailBadDepInfoByDepId', function(req, res, next) {
     const { lenThreshold, depId, type } = req.query
     depInfo = getDepInfo(lenThreshold)
     const { badDeps, depMap } = depInfo
-    const detailPath = badDeps.find(d => d.type === 'long').paths.find(d => d.id === parseInt(depId)).path,
+    const detailPath = badDeps.find(d => d.type === type).paths.find(d => d.id === parseInt(depId)).path,
         len = detailPath.length
     // console.log(detailPath)
     let links = [],
-        target
-    detailPath.forEach((src, idx) => {
+        target,
+        src
+    detailPath.forEach((val, idx) => {
         if (idx === len - 1) return
+        src = val
         target = detailPath[idx + 1]
         const edge = depMap[src].find(d => d.src === target)
         links.push({
@@ -42,8 +44,18 @@ router.get('/getDetailBadDepInfoByDepId', function(req, res, next) {
             specifiers: edge.specifiers
         })
     })
+    // 如果是循环依赖（直接或者间接），要把最后一条边信息补上
+    if (type === 'indirect' || type === 'direct') {
+        src = detailPath[len - 1]
+        target = detailPath[0]
+        links.push({
+            source: src,
+            target,
+            specifiers: depMap[src].find(d => d.src === target)
+        })
+    }
     res.send({
-        nodes:detailPath,
+        nodes: detailPath,
         links
     })
 })
