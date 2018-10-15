@@ -22,6 +22,44 @@ router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
     res.send({ root, badDeps: depInfo.badDeps, lenDis: depInfo.lenDis })
 });
 
+// 根据依赖id查找该依赖的细节信息
+router.get('/getDetailBadDepInfoByDepId', function(req, res, next) {
+    const { lenThreshold, depId, type } = req.query
+    depInfo = getDepInfo(lenThreshold)
+    const { badDeps, depMap } = depInfo
+    const detailPath = badDeps.find(d => d.type === type).paths.find(d => d.id === parseInt(depId)).path,
+        len = detailPath.length
+    // console.log(detailPath)
+    let links = [],
+        target,
+        src
+    detailPath.forEach((val, idx) => {
+        if (idx === len - 1) return
+        src = val
+        target = detailPath[idx + 1]
+        const edge = depMap[src].find(d => d.src === target)
+        links.push({
+            source: src,
+            target: edge.src,
+            specifiers: edge.specifiers
+        })
+    })
+    // 如果是循环依赖（直接或者间接），要把最后一条边信息补上
+    if (type === 'indirect' || type === 'direct') {
+        src = detailPath[len - 1]
+        target = detailPath[0]
+        links.push({
+            source: src,
+            target,
+            specifiers: depMap[src].find(d => d.src === target)
+        })
+    }
+    res.send({
+        nodes: detailPath,
+        links
+    })
+})
+
 // 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
 function getDepInfo(lenThreshold) {
     let arr = [],
