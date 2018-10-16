@@ -51,7 +51,7 @@ router.get('/getDetailBadDepInfoByDepId', function(req, res, next) {
         links.push({
             source: src,
             target,
-            specifiers: depMap[src].find(d => d.src === target)
+            specifiers: depMap[src].find(d => d.src === target).specifiers
         })
     }
     res.send({
