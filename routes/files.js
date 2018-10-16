@@ -13,6 +13,14 @@ router.get('/', function(req, res, next) {
     res.render('index', { title: 'Express' });
 });
 
+// 获取文件内容
+router.get('/getFileContent', function(req, res, next) {
+    let fname = req.query.filename
+    fs.readFile(fname, 'utf8', (err, data) => {
+        if (err) throw err;
+        res.send({content:data})
+    });
+});
 
 router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
     const lenThreshold = req.query.lenThreshold,
