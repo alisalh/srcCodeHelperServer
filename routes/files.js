@@ -7,33 +7,48 @@ const babelParser = require("@babel/parser")
 const EventEmitter = require('events');
 var dependencyTree = require('dependency-tree')
 let _ = require("underscore")
+
+const libConfig = {
+    vue: {
+        path: '/Users/wendahuang/Desktop/vue/',
+        entry: 'src/platforms/web/entry-runtime-with-compiler.js',
+        webpackConfig: 'src/vuePackConfig.js'
+    },
+    d3Hierarchy: {
+        path: '/Users/wendahuang/Desktop/d3',
+        entry: 'src/index.js',
+        webpackConfig: 'src/d3PackConfig.js'
+    }
+}
 const vueSrc = '/Users/wendahuang/Desktop/vue/';
 
-router.get('/', function(req, res, next) {
+router.get('/', function (req, res, next) {
     res.render('index', { title: 'Express' });
 });
 
 // 获取文件内容
-router.get('/getFileContent', function(req, res, next) {
+router.get('/getFileContent', function (req, res, next) {
     let fname = req.query.filename
     fs.readFile(fname, 'utf8', (err, data) => {
         if (err) throw err;
-        res.send({content:data})
+        res.send({ content: data })
     });
 });
 
-router.get('/getFolderHierarchyAndFileInfo', function(req, res, next) {
+router.get('/getFolderHierarchyAndFileInfo', function (req, res, next) {
     const lenThreshold = req.query.lenThreshold,
-        depInfo = getDepInfo(lenThreshold)
+        libName = req.query.libName,
+        config = libConfig[libName]
+    depInfo = getDepInfo(lenThreshold, config)
     // res.send({depInfo})
-    const root = getFileInfo(depInfo)
+    const root = getFileInfo(depInfo, config)
     res.send({ root, badDeps: depInfo.badDeps, lenDis: depInfo.lenDis })
 });
 
 // 根据依赖id查找该依赖的细节信息
-router.get('/getDetailBadDepInfoByDepId', function(req, res, next) {
-    const { lenThreshold, depId, type } = req.query
-    depInfo = getDepInfo(lenThreshold)
+router.get('/getDetailBadDepInfoByDepId', function (req, res, next) {
+    const { lenThreshold, depId, type, libName } = req.query
+    depInfo = getDepInfo(lenThreshold, libConfig[libName])
     const { badDeps, depMap } = depInfo
     const detailPath = badDeps.find(d => d.type === type).paths.find(d => d.id === parseInt(depId)).path,
         len = detailPath.length
@@ -69,22 +84,23 @@ router.get('/getDetailBadDepInfoByDepId', function(req, res, next) {
 })
 
 // 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
-function getDepInfo(lenThreshold) {
+function getDepInfo(lenThreshold, config) {
     let arr = [],
         maxLen = -1,
         depMapInfo = new dependencyTree({
-            filename: path.resolve(vueSrc, 'src/platforms/web/entry-runtime-with-compiler.js'),
-            directory: path.resolve(vueSrc),
-            webpackConfig: path.resolve(vueSrc, 'src/vuePackConfig.js'), // optional
+            filename: path.resolve(config.path, config.entry),
+            directory: path.resolve(config.path),
+            webpackConfig: config.webpackConfig ? path.resolve(config.path, config.webpackConfig) : null, // optional
             nonExistent: arr, // optional
             lenThreshold
         })
     maxLen = depMapInfo.depHell.long.slice().sort((a, b) => b.length - a.length)[0].length
+    // console.log(depMapInfo)
     return {
         badDeps: [{ type: 'long', paths: backWardsCompat(depMapInfo.depHell.long, 0, 'long'), threshold: lenThreshold, maxLen },
-            { type: 'indirect', paths: backWardsCompat(depMapInfo.depHell.indirect, depMapInfo.depHell.long.length, 'indirect') },
-            { type: 'direct', paths: backWardsCompat(depMapInfo.depHell.direct, depMapInfo.depHell.indirect.length, 'direct') },
-            { type: 'scc', paths: [] }
+        { type: 'indirect', paths: backWardsCompat(depMapInfo.depHell.indirect, depMapInfo.depHell.long.length, 'indirect') },
+        { type: 'direct', paths: backWardsCompat(depMapInfo.depHell.direct, depMapInfo.depHell.indirect.length, 'direct') },
+        { type: 'scc', paths: [] }
         ],
         depMap: depMapInfo.depMap,
         lenDis: depMapInfo.lenDis
@@ -101,14 +117,14 @@ function backWardsCompat(deps, offset, type) {
 }
 
 // 返回文件夹的层次结构，以及文件的基本统计信息（文件大小、文件所包含函数、依赖和被依赖文件，坏依赖数）
-function getFileInfo({ badDeps, depMap }) {
-    let directory = path.resolve(vueSrc, 'src'),
+function getFileInfo({ badDeps, depMap }, config) {
+    let directory = path.resolve(config.path, 'src'),
         root = {
             name: directory,
             type: 'dir',
             children: []
         },
-        blackList = ['.DS_Store']
+        blackList = ['.DS_Store','.eslintrc.json','LICENSE','dist','package.json','README.md','rollup.config.js','yarn.lock','yarn-error.log','locale']
     readDirSync(directory, root)
     let depth = getTreeDepth(root)
     // console.log(depth)
@@ -117,7 +133,7 @@ function getFileInfo({ badDeps, depMap }) {
 
     function readDirSync(rootPath, root) {
         var pa = fs.readdirSync(rootPath);
-        pa.forEach(function(ele, index) {
+        pa.forEach(function (ele, index) {
             // console.log(ele)
             if (blackList.indexOf(ele) !== -1) return
             var curPath = path.resolve(rootPath, ele),
@@ -146,6 +162,17 @@ function getFileInfo({ badDeps, depMap }) {
 function extractFunc(fpath) {
     const code = fs.readFileSync(fpath, "utf-8"),
         fileInfo = { func: [] },
+        visitor = {
+            FunctionDeclaration(path) {
+                const loc = path.node.loc
+                path.node.id && fileInfo.func.push({
+                    lineNum: loc.end.line - loc.start.line + 1,
+                    name: path.node.id.name
+                })
+            }
+        }
+    let ast = null
+    try {
         ast = babelParser.parse(code, {
             // parse in strict mode and allow module declarations
             sourceType: "module",
@@ -153,17 +180,12 @@ function extractFunc(fpath) {
                 // enable jsx and flow syntax
                 "flow"
             ]
-        }),
-        visitor = {
-            FunctionDeclaration(path) {
-                const loc = path.node.loc
-                fileInfo.func.push({
-                    lineNum: loc.end.line - loc.start.line + 1,
-                    name: path.node.id.name
-                })
-            }
-        }
-
+        })
+    } catch (e) {
+        console.log(e)
+        console.log(fpath)
+        process.exit(1)
+    }
     babelTraverse(ast, visitor);
     return fileInfo;
 }
