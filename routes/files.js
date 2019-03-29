@@ -5,7 +5,8 @@ var path = require('path');
 const babelTraverse = require("@babel/traverse").default;
 const babelParser = require("@babel/parser")
 const EventEmitter = require('events');
-var dependencyTree = require('dependency-tree')
+var dependencyTree = require('../lib/dependency-tree')
+// var dependencyTree = require('dependency-tree')
 let _ = require("underscore")
 
 const libConfig = {
@@ -14,7 +15,7 @@ const libConfig = {
         entry: 'src/platforms/web/entry-runtime-with-compiler.js',
         webpackConfig: 'src/vuePackConfig.js'
     },
-    d3Hierarchy: {
+    d3: {
         path: '/Users/wendahuang/Desktop/d3',
         entry: 'src/index.js',
         webpackConfig: 'src/d3PackConfig.js'
@@ -99,8 +100,8 @@ function getDepInfo(lenThreshold, config) {
     return {
         badDeps: [{ type: 'long', paths: backWardsCompat(depMapInfo.depHell.long, 0, 'long'), threshold: lenThreshold, maxLen },
         { type: 'indirect', paths: backWardsCompat(depMapInfo.depHell.indirect, depMapInfo.depHell.long.length, 'indirect') },
-        { type: 'direct', paths: backWardsCompat(depMapInfo.depHell.direct, depMapInfo.depHell.indirect.length, 'direct') },
-        { type: 'scc', paths: [] }
+        { type: 'direct', paths: backWardsCompat(depMapInfo.depHell.direct, depMapInfo.depHell.indirect.length, 'direct') }
+        // { type: 'scc', paths: [] }
         ],
         depMap: depMapInfo.depMap,
         lenDis: depMapInfo.lenDis
