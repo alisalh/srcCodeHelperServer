@@ -13,8 +13,10 @@
     "debug": "~2.6.9",
     "dependency-tree": "^6.1.0",
     "express": "~4.15.5",
+    "filing-cabinet": "^1.13.0",
     "jade": "~1.11.0",
     "morgan": "~1.9.0",
+    "node-source-walk": "^3.0.0",
     "serve-favicon": "~2.4.5",
     "underscore": "^1.8.3"
   },
