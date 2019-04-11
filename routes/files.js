@@ -2,6 +2,7 @@ var express = require('express');
 var router = express.Router();
 var fs = require('fs');
 var path = require('path');
+var parse = require('csv-parse/lib/sync');
 const babelTraverse = require("@babel/traverse").default;
 const babelParser = require("babylon")
 const EventEmitter = require('events');
@@ -12,15 +13,32 @@ let _ = require("underscore")
 const libConfig = {
     vue: {
         path: 'E:/Workspace/Visualization/srcCodeHelperServer/data/vue',
-        entry: 'src/platforms/web/entry-runtime-with-compiler.js',
+        entry: ['src/platforms/web/entry-runtime-with-compiler.js', 
+                'src/platforms/web/entry-compiler.js',
+                'src/platforms/web/entry-runtime.js',
+                'src/platforms/web/entry-server-basic-renderer.js',
+                'src/platforms/web/entry-server-renderer.js',
+                'src/platforms/weex/entry-compiler.js',
+                // 'src/platforms/weex/entry-framework.js',
+                'src/platforms/weex/entry-runtime-factory.js'
+            ],
         webpackConfig: 'src/vuePackConfig.js'
     },
     d3: {
         path: 'E:/Workspace/Visualization/srcCodeHelperServer/data/d3',
-        entry: 'src/index.js',
+        entry: ['src/index.js'],
         webpackConfig: 'src/d3PackConfig.js'
     }
 }
+
+const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\d3\\src',
+    libName = 'd3',
+    config = libConfig[libName]
+const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
+    new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config),
+    root = getFileHierachy(config)
+// getGraph(fileList, new_depInfo.badDeps)
+console.log('finish preparing data')
 
 router.get('/', function (req, res, next) {
     res.render('index', { title: 'Express' });
@@ -35,106 +53,28 @@ router.get('/getFileContent', function (req, res, next) {
     });
 });
 
+// 获取文件列表
+router.get('/getFileList', function(req, res, next){
+    res.send(fileList)
+})
+
 // 只返回文件结构
 router.get('/getFolderHierarchy', function (req, res, next) {
-    const libName = req.query.libName,
-        config = libConfig[libName]
-    const root = getFileHierachy(config)
     res.send({root})
 });
 
-function getAllFiles(rootPath) {
-    let blackList = ['.DS_Store','.eslintrc.json','LICENSE','dist','package.json','README.md','rollup.config.js','yarn.lock','yarn-error.log','locale','vuePackConfig.js','d3PackConfig.js'],
-        fileList = []
-    traverseDir(rootPath)
-    function traverseDir(dir){
-        var pa = fs.readdirSync(dir);
-        pa.forEach(function (ele, index) {
-            if (blackList.indexOf(ele) !== -1) return
-            var curPath = path.resolve(dir, ele),
-                info = fs.statSync(curPath)
-            if (info.isDirectory()) {
-                traverseDir(curPath);
-            } 
-            else {
-                fileList.push(curPath)
-            }
-        })
-    }
-    return fileList
-}
-
-var depInfo = []
-
 router.get('/getFilesInfo', function(req, res, next){
-    const libName = req.query.libName,
-        config = libConfig[libName],
-    fileInfo = getFileInfo(depInfo, config)
-    fileInfo.forEach(d => {
-        d.fileInfo.depended = d.fileInfo.depended.length
-        d.fileInfo.depending = d.fileInfo.depending.length
-        d.fileInfo.direct = d.fileInfo.direct.length
-        d.fileInfo.func = d.fileInfo.func.length
-        d.fileInfo.indirect = d.fileInfo.indirect.length
-        d.fileInfo.long = d.fileInfo.long.length
-    })
     res.send(fileInfo)
 })
 
 router.get('/getDepsInfo', function(req, res, next){
-    const libName = req.query.libName,
-        config = libConfig[libName],
-        lenThreshold = req.query.lenThreshold
-    depInfo = getDepInfo(lenThreshold, config)
-     // let badDeps = getDepInfo(0, config).badDeps
-    // let num = 0
-    // let fWriteName = 'graph.txt'
-    // let fWrite = fs.createWriteStream(fWriteName)
-    // let rootPath = path.join(config.path, '/src')
-    // let fileList = getAllFiles(rootPath.replace(/\\/g, '\\\\'))
-    // badDeps.forEach(deps => {
-    //     num = num + deps.paths.length
-    //     // 长依赖无环
-    //     if(deps.type === 'long'){
-    //         deps.paths.forEach(d => {
-    //             let sourceIndex = fileList.indexOf(d.path[0])
-    //             for(let i=1; i<d.path.length; i++){
-    //                 let targetIndex = fileList.indexOf(d.path[i])
-    //                 fWrite.write(sourceIndex + ',' + targetIndex)
-    //                 fWrite.write('\n')
-    //                 sourceIndex = targetIndex
-    //             }
-    //         }) 
-    //     }
-    //     else{
-    //         deps.paths.forEach(d => {
-    //             let sourceIndex = fileList.indexOf(d.path[0])
-    //             for(let i=1; i<d.path.length; i++){
-    //                 let targetIndex = fileList.indexOf(d.path[i])
-    //                 fWrite.write(sourceIndex + ',' + targetIndex)
-    //                 fWrite.write('\n')
-    //                 sourceIndex = targetIndex
-    //             }
-    //             // 添加首尾相连
-    //             sourceIndex = fileList.indexOf(d.path[d.path.length-1])
-    //             targetIndex = fileList.indexOf(d.path[0])
-    //             fWrite.write(sourceIndex + ',' + targetIndex)
-    //             fWrite.write('\n')
-    //         })  
-    //     }   
-    // })
-    // let fWriteName1 = 'filelist.txt'
-    // let fWrite1 = fs.createWriteStream(fWriteName1)
-    // fileList.forEach(d=>{
-    //     fWrite1.write(d)
-    //     fWrite1.write('\n')
-    // })
-    // console.log(fileList.length)
-    // console.log('finish writing and save success')
-    // console.log('the total length:', num)
-    res.send({badDeps: depInfo.badDeps, lenDis: depInfo.lenDis })
+    let num = 0
+    new_depInfo.badDeps.forEach(deps =>{
+        num = num + deps.paths.length
+    })
+    console.log('the total length:', num)
+    res.send({badDeps: new_depInfo.badDeps, lenDis: new_depInfo.lenDis })
 })
-
 
 // 根据依赖id查找该依赖的细节信息
 router.get('/getDetailBadDepInfoByDepId', function (req, res, next) {
@@ -175,37 +115,69 @@ router.get('/getDetailBadDepInfoByDepId', function (req, res, next) {
     })
 })
 
-// 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
-function getDepInfo(lenThreshold, config) {
-    let arr = [],
-        maxLen = -1,
-        depMapInfo = new dependencyTree({
-            filename: path.resolve(config.path, config.entry),
-            directory: path.resolve(config.path),
-            webpackConfig: config.webpackConfig ? path.resolve(config.path, config.webpackConfig) : null, // optional
-            nonExistent: arr, // optional
-            lenThreshold
-        })
-    maxLen = depMapInfo.depHell.long.slice().sort((a, b) => b.length - a.length)[0].length
-    // console.log(depMapInfo)
-    return {
-        badDeps: [{ type: 'long', paths: backWardsCompat(depMapInfo.depHell.long, 0, 'long'), threshold: lenThreshold, maxLen },
-        { type: 'indirect', paths: backWardsCompat(depMapInfo.depHell.indirect, depMapInfo.depHell.long.length, 'indirect') },
-        { type: 'direct', paths: backWardsCompat(depMapInfo.depHell.direct, depMapInfo.depHell.indirect.length, 'direct') }
-        // { type: 'scc', paths: [] }
-        ],
-        depMap: depMapInfo.depMap,
-        lenDis: depMapInfo.lenDis
-    }
+router.get('/getDistance', function(req, res, next){
+    var fileDist = getDistance(libName)
+    res.send(fileDist)
+})
+
+function getGraph(fileList, badDeps){
+    let fWriteGraphName = 'graph.txt'
+    let fGraphWrite = fs.createWriteStream(fWriteGraphName)
+
+    badDeps.forEach(deps => {
+        // 长依赖无环
+        if(deps.type === 'long'){
+            deps.paths.forEach(d => {
+                let sourceIndex = d.path[0]
+                for(let i=1; i<d.path.length; i++){
+                    let targetIndex = d.path[i]
+                    fGraphWrite.write(sourceIndex + ',' + targetIndex)
+                    fGraphWrite.write('\n')
+                    sourceIndex = targetIndex
+                }
+            }) 
+        }
+        else{
+            deps.paths.forEach(d => {
+                let sourceIndex = d.path[0]
+                for(let i=1; i<d.path.length; i++){
+                    let targetIndex = d.path[i]
+                    fGraphWrite.write(sourceIndex + ',' + targetIndex)
+                    fGraphWrite.write('\n')
+                    sourceIndex = targetIndex
+                }
+                // 添加首尾相连
+                sourceIndex = d.path[d.path.length-1]
+                targetIndex = d.path[0]
+                fGraphWrite.write(sourceIndex + ',' + targetIndex)
+                fGraphWrite.write('\n')
+            })  
+        }   
+    })
+    console.log(fileList.length)
+    console.log('finish writing and save success')
 }
 
-// 对用新逻辑获取的badDeps进行向后接口的兼容
-function backWardsCompat(deps, offset, type) {
-    return deps.map((d) => ({
-        id: offset++,
-        path: d,
-        type
-    }))
+// 获取文件列表
+function getAllFiles(rootPath) {
+    let blackList = ['.DS_Store','.eslintrc.json','LICENSE','dist','bin','package.json','README.md','rollup.config.js','yarn.lock','yarn-error.log','locale','vuePackConfig.js','d3PackConfig.js'],
+        fileList = []
+    traverseDir(rootPath)
+    function traverseDir(dir){
+        var pa = fs.readdirSync(dir);
+        pa.forEach(function (ele, index) {
+            if (blackList.indexOf(ele) !== -1) return
+            var curPath = path.resolve(dir, ele),
+                info = fs.statSync(curPath)
+            if (info.isDirectory()) {
+                traverseDir(curPath);
+            } 
+            else {
+                fileList.push(curPath)
+            }
+        })
+    }
+    return fileList
 }
 
 // 返回文件夹的层次结构
@@ -216,7 +188,7 @@ function getFileHierachy(config) {
             type: 'dir',
             children: []
         },
-        blackList = ['.DS_Store','.eslintrc.json','LICENSE','dist','package.json','README.md','rollup.config.js','yarn.lock','yarn-error.log','locale','vuePackConfig.js','d3PackConfig.js']
+        blackList = ['.DS_Store','.eslintrc.json','LICENSE','dist','bin','package.json','README.md','rollup.config.js','yarn.lock','yarn-error.log','locale','vuePackConfig.js','d3PackConfig.js']
     let id = 0
     readDirSync(directory, root)
     let depth = getTreeDepth(root)
@@ -244,12 +216,92 @@ function getFileHierachy(config) {
     }
 }
 
+// 获取相似节点信息
+function getDistance(libName){
+    let filepath
+    if(libName === 'vue')
+        filepath = path.join(__dirname, '../data/vue_distance.csv')
+    if(libName === 'd3')
+        filepath = path.join(__dirname, '../data/d3_distance.csv')
+    const fpath = filepath.replace(/\\/g, '\\\\')
+    const text = fs.readFileSync(fpath, 'utf-8')
+    let fileDist = parse(text, {
+        columns: true
+    })
+    return fileDist
+}
+
+// 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
+function getDepInfo(lenThreshold, config) {
+    let arr = [],
+        maxLen = -1
+    
+    let depMapInfo = new dependencyTree({
+        filename: path.resolve(config.path, config.entry[0]),
+        directory: path.resolve(config.path),
+        webpackConfig: config.webpackConfig ? path.resolve(config.path, config.webpackConfig) : null, // optional
+        nonExistent: arr, // optional
+        lenThreshold
+    })
+
+    for(let i=1; i<config.entry.length; i++){
+        let temp = new dependencyTree({
+            filename: path.resolve(config.path, config.entry[i]),
+            directory: path.resolve(config.path),
+            webpackConfig: config.webpackConfig ? path.resolve(config.path, config.webpackConfig) : null, // optional
+            nonExistent: arr, // optional
+            lenThreshold
+        })
+
+        // 加入depMap和lenDis
+        for(var key in temp.depMap){
+            if(!depMapInfo.depMap.hasOwnProperty(key))
+                depMapInfo.depMap[key] = temp.depMap[key]
+        }
+        for(var key in temp.lenDis){
+            if(!depMapInfo.lenDis.hasOwnProperty(key))
+                depMapInfo.lenDis[key] = temp.lenDis[key]
+            else
+                depMapInfo.lenDis[key] += temp.lenDis[key]
+        }
+
+        // 加入三种依赖
+        temp.depHell.long.forEach(path =>{
+            depMapInfo.depHell.long.push(path)
+        })
+        temp.depHell.indirect.forEach(path =>{
+            depMapInfo.depHell.indirect.push(path) 
+        })
+        temp.depHell.direct.forEach(path =>{
+            depMapInfo.depHell.direct.push(path)
+        })
+    }
+    maxLen = depMapInfo.depHell.long.slice().sort((a, b) => b.length - a.length)[0].length
+    return {
+        badDeps: [
+            { type: 'long', paths: backWardsCompat(depMapInfo.depHell.long, 0, 'long'), threshold: lenThreshold, maxLen },
+            { type: 'indirect', paths: backWardsCompat(depMapInfo.depHell.indirect, depMapInfo.depHell.long.length, 'indirect') },
+            { type: 'direct', paths: backWardsCompat(depMapInfo.depHell.direct, depMapInfo.depHell.indirect.length, 'direct') }
+        ],
+        depMap: depMapInfo.depMap,
+        lenDis: depMapInfo.lenDis
+    }
+}
+
 //返回文件的基本统计信息（文件大小、文件所包含函数、依赖和被依赖文件，坏依赖数）
 function getFileInfo({ badDeps, depMap },config) {
     let directory = path.resolve(config.path, 'src'),
-        blackList = ['.DS_Store','.eslintrc.json','LICENSE','dist','package.json','README.md','rollup.config.js','yarn.lock','yarn-error.log','locale','vuePackConfig.js','d3PackConfig.js']
+        blackList = ['.DS_Store','.eslintrc.json','LICENSE','dist','bin','package.json','README.md','rollup.config.js','yarn.lock','yarn-error.log','locale','vuePackConfig.js','d3PackConfig.js']
     let fileInfo = [], id = 0
     readFileSync(directory, fileInfo)
+    fileInfo.forEach(d => {
+        d.fileInfo.depended = d.fileInfo.depended.length
+        d.fileInfo.depending = d.fileInfo.depending.length
+        d.fileInfo.direct = d.fileInfo.direct.length
+        d.fileInfo.func = d.fileInfo.func.length
+        d.fileInfo.indirect = d.fileInfo.indirect.length
+        d.fileInfo.long = d.fileInfo.long.length
+    })
     return fileInfo
 
     function readFileSync(rootPath, fileInfo) {
@@ -261,18 +313,76 @@ function getFileInfo({ badDeps, depMap },config) {
             if (info.isDirectory()) {
                 readFileSync(curPath, fileInfo);
             } else {
+                let fileId = fileList.indexOf(curPath)
                 fileInfo.push({
                     id: id++,
                     name: curPath,
                     fileInfo: Object.assign({}, { size: info.size },
                         extractFunc(curPath),
-                        extractBadDeps(curPath, badDeps),
+                        extractBadDeps(fileId, badDeps),
                         extractFileDep(curPath, depMap)
                     )
                 })
             }
         })
     }
+}
+
+function filterSamePaths(depInfo, fileList){
+    let depMap = depInfo.depMap,
+        badDeps = depInfo.badDeps,
+        lenDis = depInfo.lenDis
+    let origin_long = badDeps[0].paths, 
+        origin_indirect = badDeps[1].paths, 
+        origin_direct = badDeps[2].paths
+    let long_map = {}, indirect_map = {}, direct_map ={}
+
+    // 过滤相同的路径, 保存文件编号, 减少内存
+    for(let i=0; i<origin_long.length; i++){
+        let path = []
+        for(let j=0; j<origin_long[i].path.length; j++){
+            path.push(fileList.indexOf(origin_long[i].path[j]))
+        }
+        if(!long_map[path.toString()])
+            long_map[path.toString()] = path
+        else
+            lenDis[path.length]--
+    }
+    for(let i=0; i<origin_indirect.length; i++){
+        let path = []
+        for(let j=0; j<origin_indirect[i].path.length; j++){
+            path.push(fileList.indexOf(origin_indirect[i].path[j]))
+        }
+        if(!indirect_map[path.toString()])
+            indirect_map[path.toString()] = path
+    }
+    for(let i=0; i<origin_direct.length; i++){
+        let path = []
+        for(let j=0; j<origin_direct[i].path.length; j++){
+            path.push(fileList.indexOf(origin_direct[i].path[j]))
+        }
+        if(!direct_map[path.toString()])
+            direct_map[path.toString()] = path
+    }
+    let maxLen = Object.values(long_map).slice().sort((a, b) => b.length - a.length)[0].length
+    return {
+        badDeps: [
+            { type: 'long', paths: backWardsCompat(Object.values(long_map), 0, 'long'), maxLen },
+            { type: 'indirect', paths: backWardsCompat(Object.values(indirect_map), Object.keys(long_map).length, 'indirect') },
+            { type: 'direct', paths: backWardsCompat(Object.values(direct_map), Object.keys(indirect_map).length, 'direct') }
+        ],
+        depMap: depMap,
+        lenDis: lenDis
+    }
+}
+
+// 对用新逻辑获取的badDeps进行向后接口的兼容
+function backWardsCompat(deps, offset, type) {
+    return deps.map((d) => ({
+        id: offset++,
+        path: d,
+        type
+    }))
 }
 
 // 提取函数信息：lineNum和name
