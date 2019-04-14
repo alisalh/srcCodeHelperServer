@@ -31,13 +31,15 @@ const libConfig = {
     }
 }
 
-const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\d3\\src',
-    libName = 'd3',
+const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\vue\\src',
+    libName = 'vue',
     config = libConfig[libName]
 const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config),
-    root = getFileHierachy(config)
+    root = getFileHierachy(config), graphData = creatGraphData(new_depInfo.badDeps),
+    subGraphData = createSubGraphData(graphData)
 // getGraph(fileList, new_depInfo.badDeps)
+// getAllPaths(new_depInfo.badDeps)
 console.log('finish preparing data')
 
 router.get('/', function (req, res, next) {
@@ -63,13 +65,31 @@ router.get('/getFolderHierarchy', function (req, res, next) {
     res.send({root})
 });
 
+// 返回graph data
+router.get('/getGraphData', function(req, res, next){
+    res.send(graphData)
+})
+
+// 返回subgraph data
+router.get('/getSubGraphData', function(req, res, next){
+    const fileid = req.query.fileid
+    const subGraph = subGraphData.find(d => d.id === parseInt(fileid))
+    res.send(subGraph)
+})
+
 router.get('/getFilesInfo', function(req, res, next){
     res.send(fileInfo)
 })
 
 router.get('/getDepsInfo', function(req, res, next){
     let num = 0
+    // 添加循环依赖的首尾相连
     new_depInfo.badDeps.forEach(deps =>{
+        if(deps.type !== 'long'){
+            deps.paths.forEach(d =>{
+                d.path.push(d.path[0])
+            })
+        }
         num = num + deps.paths.length
     })
     console.log('the total length:', num)
@@ -120,6 +140,71 @@ router.get('/getDistance', function(req, res, next){
     res.send(fileDist)
 })
 
+router.get('/getCoordinates', function(req, res, next){
+    var coordinates = getCoordinates(libName)
+    res.send(coordinates)
+})
+
+// 构造力布局中的nodes和links
+function creatGraphData(badDeps){
+    var depData = []
+      let longPaths = badDeps[0].paths,
+        indirectPaths = badDeps[1].paths,
+        directPaths = badDeps[2].paths
+      let num = 0
+      longPaths.forEach(item => {
+        item.id = num
+        depData.push(item)
+        num += 1
+      })
+      indirectPaths.forEach(item => {
+        item.id = num
+        depData.push(item)
+        num += 1
+      })
+      directPaths.forEach(item => {
+        item.id = num
+        depData.push(item)
+        num += 1
+      })
+      let nodes = new Set(),
+        links = new Set()
+      depData.forEach(d => {
+        for (let i = 0; i < d.path.length - 1; i++) {
+          nodes.add(d.path[i]) //add node
+          links.add(d.path[i] + '|' + d.path[i + 1]) //add link('|' is used as conjunction to connect the two nodes)
+        }
+        if (d.type !== 'long')
+          links.add(d.path[d.path.length - 1] + '|' + d.path[0])
+        nodes.add(d.path[d.path.length - 1]) // do not miss the last node
+      })
+      var graphData = {}
+      graphData.nodes = [...nodes].map(d => ({ fileid: parseInt(d) }))
+      graphData.links = [...links].map(function(d) {
+      let parts = d.split('|')
+        return { source: parseInt(parts[0]), target: parseInt(parts[1]) }
+      })
+      return graphData
+}
+
+function createSubGraphData(graphData){
+    var subGraphData = []
+    graphData.nodes.forEach(node => {
+        let subGraph = {}
+        subGraph.links = graphData.links
+            .filter(link => link.source === node.fileid || link.target === node.fileid)
+            .map(function(d) { return {source: d.source, target: d.target} })
+        let nodes = new Set()
+        subGraph.links.forEach(link =>{
+            nodes.add(link.source)
+            nodes.add(link.target)
+        })
+        subGraph.nodes = [...nodes].map(node => ({ fileid: node }))
+        subGraphData.push({id: node.fileid, subGraph: subGraph})
+    })
+    return subGraphData
+}
+
 function getGraph(fileList, badDeps){
     let fWriteGraphName = 'graph.txt'
     let fGraphWrite = fs.createWriteStream(fWriteGraphName)
@@ -155,6 +240,32 @@ function getGraph(fileList, badDeps){
         }   
     })
     console.log(fileList.length)
+    console.log('finish writing and save success')
+}
+
+function getAllPaths(badDeps){
+    let fWriteGraphName = 'paths.txt'
+    let fGraphWrite = fs.createWriteStream(fWriteGraphName)
+
+    badDeps.forEach(deps => {
+        // 长依赖无环
+        if(deps.type === 'long'){
+            deps.paths.forEach(d => {
+                for(let i=0; i<d.path.length; i++)
+                    fGraphWrite.write(d.path[i]+' ')
+                fGraphWrite.write('\n')  
+            }) 
+        }
+        else{
+            deps.paths.forEach(d => {
+                for(let i=0; i<d.path.length; i++)
+                    fGraphWrite.write(d.path[i]+' ') 
+                // 末尾添加头节点
+                fGraphWrite.write(d.path[0]+' ')
+                fGraphWrite.write('\n')
+            })  
+        }   
+    })
     console.log('finish writing and save success')
 }
 
@@ -223,6 +334,21 @@ function getDistance(libName){
         filepath = path.join(__dirname, '../data/vue_distance.csv')
     if(libName === 'd3')
         filepath = path.join(__dirname, '../data/d3_distance.csv')
+    const fpath = filepath.replace(/\\/g, '\\\\')
+    const text = fs.readFileSync(fpath, 'utf-8')
+    let fileDist = parse(text, {
+        columns: true
+    })
+    return fileDist
+}
+
+// 获取降维坐标
+function getCoordinates(libName){
+    let filepath
+    if(libName === 'vue')
+        filepath = path.join(__dirname, '../data/vue_tsne.csv')
+    if(libName === 'd3')
+        filepath = path.join(__dirname, '../data/d3_tsne.csv')
     const fpath = filepath.replace(/\\/g, '\\\\')
     const text = fs.readFileSync(fpath, 'utf-8')
     let fileDist = parse(text, {
@@ -381,7 +507,8 @@ function backWardsCompat(deps, offset, type) {
     return deps.map((d) => ({
         id: offset++,
         path: d,
-        type
+        type: type,
+        len: d.length
     }))
 }
 
