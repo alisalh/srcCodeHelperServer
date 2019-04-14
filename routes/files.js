@@ -37,7 +37,7 @@ const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\vue\\
 const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config),
     root = getFileHierachy(config), graphData = creatGraphData(new_depInfo.badDeps),
-    subGraphData = createSubGraphData(graphData)
+    subGraphData = createSubGraphData(graphData), coordinates = getCoordinates(libName, new_depInfo.badDeps)
 // getGraph(fileList, new_depInfo.badDeps)
 // getAllPaths(new_depInfo.badDeps)
 console.log('finish preparing data')
@@ -81,19 +81,24 @@ router.get('/getFilesInfo', function(req, res, next){
     res.send(fileInfo)
 })
 
-router.get('/getDepsInfo', function(req, res, next){
-    let num = 0
-    // 添加循环依赖的首尾相连
-    new_depInfo.badDeps.forEach(deps =>{
-        if(deps.type !== 'long'){
-            deps.paths.forEach(d =>{
-                d.path.push(d.path[0])
-            })
-        }
-        num = num + deps.paths.length
-    })
-    console.log('the total length:', num)
-    res.send({badDeps: new_depInfo.badDeps, lenDis: new_depInfo.lenDis })
+router.get('/getLenDis', function(req, res, next){
+    res.send({lenDis: new_depInfo.lenDis, maxLen: new_depInfo.badDeps[0].maxLen})
+})
+
+router.get('/getBarData', function(req, res, next){
+    var threshold = req.query.threshold
+    let long = 0, indirect = 0, direct = 0
+    for(var key in coordinates.long){
+        if(parseInt(key) >= parseInt(threshold))
+            long = long + coordinates.long[key].length
+    }
+    indirect = coordinates.indirect.length
+    direct = coordinates.direct.length
+    let data = []
+    data.push({type: 'long', num: long})
+    data.push({type: 'indirect', num: indirect})
+    data.push({type: 'direct', num: direct})
+    res.send(data)
 })
 
 // 根据依赖id查找该依赖的细节信息
@@ -141,9 +146,13 @@ router.get('/getDistance', function(req, res, next){
 })
 
 router.get('/getCoordinates', function(req, res, next){
-    var coordinates = getCoordinates(libName)
-    res.send(coordinates)
+    const len = req.query.len
+    var coords = coordinates.long[len]
+    coords = coords.concat(coordinates.indirect)
+    coords = coords.concat(coordinates.direct)
+    res.send(coords)
 })
+
 
 // 构造力布局中的nodes和links
 function creatGraphData(badDeps){
@@ -343,7 +352,7 @@ function getDistance(libName){
 }
 
 // 获取降维坐标
-function getCoordinates(libName){
+function getCoordinates(libName, badDeps){
     let filepath
     if(libName === 'vue')
         filepath = path.join(__dirname, '../data/vue_tsne.csv')
@@ -351,10 +360,26 @@ function getCoordinates(libName){
         filepath = path.join(__dirname, '../data/d3_tsne.csv')
     const fpath = filepath.replace(/\\/g, '\\\\')
     const text = fs.readFileSync(fpath, 'utf-8')
-    let fileDist = parse(text, {
+    let coordinates = parse(text, {
         columns: true
     })
-    return fileDist
+
+    let long = {}
+    badDeps[0].paths.forEach(path => {
+        if(long[path.len])
+            long[path.len].push(coordinates[path.id])
+        else
+            long[path.len] = [coordinates[path.id]]
+    })
+    let indirect = []
+    badDeps[1].paths.forEach(path => {
+        indirect.push(coordinates[path.id])
+    })
+    let direct = []
+    badDeps[2].paths.forEach(path => {
+        direct.push(coordinates[path.id])
+    })
+    return {long: long, indirect: indirect, direct: direct}
 }
 
 // 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
