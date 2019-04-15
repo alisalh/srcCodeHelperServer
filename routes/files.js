@@ -37,7 +37,8 @@ const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\vue\\
 const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config),
     root = getFileHierachy(config), graphData = creatGraphData(new_depInfo.badDeps),
-    subGraphData = createSubGraphData(graphData), coordinates = getCoordinates(libName, new_depInfo.badDeps)
+    subGraphData = createSubGraphData(graphData), coordinates = getCoordinates(libName, new_depInfo.badDeps),
+    stackData = creatStackData(fileList, new_depInfo.badDeps)
 // getGraph(fileList, new_depInfo.badDeps)
 // getAllPaths(new_depInfo.badDeps)
 console.log('finish preparing data')
@@ -75,6 +76,22 @@ router.get('/getSubGraphData', function(req, res, next){
     const fileid = req.query.fileid
     const subGraph = subGraphData.find(d => d.id === parseInt(fileid))
     res.send(subGraph)
+})
+
+// 返回stackData
+router.get('/getStackData', function(req, res, next){
+    const threshold = req.query.threshold
+    console.log(threshold)
+    var newStackData = []
+    stackData.forEach(d => {
+        let long = 0
+        for(var key in d.long){
+            if(parseInt(key) >= parseInt(threshold))
+                long = long + d.long[key]
+        }
+        newStackData.push({fileid: d.fileid, long: long, indirect: d.indirect, direct: d.direct})
+    })
+    res.send(newStackData)
 })
 
 router.get('/getFilesInfo', function(req, res, next){
@@ -152,6 +169,31 @@ router.get('/getCoordinates', function(req, res, next){
     coords = coords.concat(coordinates.direct)
     res.send(coords)
 })
+
+function creatStackData(fileList, badDeps){
+    var stackData = []
+    fileList.forEach((file, i) => {
+        let long = {}, indirect = 0, direct = 0
+        badDeps[0].paths.forEach(d => {
+            if(d.path.indexOf(i) !== -1){
+                if(!long[d.path.length])
+                    long[d.path.length] = 1
+                else
+                    long[d.path.length]++
+            }
+        })
+        badDeps[1].paths.forEach(d => {
+            if(d.path.indexOf(i) !== -1)
+                indirect++
+        })
+        badDeps[2].paths.forEach(d => {
+            if(d.path.indexOf(i) !== -1)
+                direct++
+        })
+        stackData.push({fileid: i, long: long, indirect: indirect, direct: direct})
+    })
+    return stackData
+}
 
 
 // 构造力布局中的nodes和links
