@@ -35,7 +35,7 @@ const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\vue\\
     libName = 'vue',
     config = libConfig[libName]
 const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
-    new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config),
+    new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config, fileList),
     root = getFileHierachy(config), graphData = creatGraphData(new_depInfo.badDeps),
     subGraphData = createSubGraphData(graphData), coordinates = getCoordinates(libName, new_depInfo.badDeps),
     stackData = creatStackData(fileList, new_depInfo.badDeps)
@@ -50,6 +50,7 @@ router.get('/', function (req, res, next) {
 // 获取文件内容
 router.get('/getFileContent', function (req, res, next) {
     let fname = req.query.filename
+    console.log(fname)
     fs.readFile(fname, 'utf8', (err, data) => {
         if (err) throw err;
         res.send({ content: data })
@@ -63,7 +64,8 @@ router.get('/getFileList', function(req, res, next){
 
 // 只返回文件结构
 router.get('/getFolderHierarchy', function (req, res, next) {
-    res.send({root})
+    let maxDepth = getTreeDepth(root)
+    res.send({root, maxDepth})
 });
 
 // 返回graph data
@@ -81,7 +83,6 @@ router.get('/getSubGraphData', function(req, res, next){
 // 返回stackData
 router.get('/getStackData', function(req, res, next){
     const threshold = req.query.threshold
-    console.log(threshold)
     var newStackData = []
     stackData.forEach(d => {
         let long = 0
@@ -118,43 +119,29 @@ router.get('/getBarData', function(req, res, next){
     res.send(data)
 })
 
+
 // 根据依赖id查找该依赖的细节信息
-router.get('/getDetailBadDepInfoByDepId', function (req, res, next) {
-    const { lenThreshold, depId, type, libName } = req.query
-    depInfo = getDepInfo(lenThreshold, libConfig[libName])
-    const { badDeps, depMap } = depInfo
-    const detailPath = badDeps.find(d => d.type === type).paths.find(d => d.id === parseInt(depId)).path,
-        len = detailPath.length
-    // console.log(detailPath)
-    let links = [],
-        target,
-        src
-    // 构建node、link关系
-    detailPath.forEach((val, idx) => {
-        if (idx === len - 1) return
-        src = val
-        target = detailPath[idx + 1]
-        const edge = depMap[src].find(d => d.src === target)
-        links.push({
-            source: src,
-            target: edge.src,
-            specifiers: edge.specifiers
-        })
-    })
-    // 如果是循环依赖（直接或者间接），要把最后一条边信息补上
-    if (type === 'indirect' || type === 'direct') {
-        src = detailPath[len - 1]
-        target = detailPath[0]
-        links.push({
-            source: src,
-            target,
-            specifiers: depMap[src].find(d => d.src === target).specifiers
+router.get('/getPathInfoById', function (req, res, next) {
+    const id = parseInt(req.query.id)
+    const longNum = new_depInfo.badDeps[0].paths.length,
+        indirectNum = new_depInfo.badDeps[1].paths.length
+    var selectedPath
+    if(id < longNum){
+        new_depInfo.badDeps[0].paths.forEach(path =>{
+            if(path.id === id) selectedPath = path
         })
     }
-    res.send({
-        nodes: detailPath,
-        links
-    })
+    if(id > longNum && id < longNum+indirectNum){
+        new_depInfo.badDeps[1].paths.forEach(path =>{
+            if(path.id === id) selectedPath = path
+        })
+    }
+    if(id > longNum+indirectNum){
+        new_depInfo.badDeps[2].paths.forEach(path =>{
+            if(path.id === id) selectedPath = path
+        })
+    }
+    res.send(selectedPath)
 })
 
 router.get('/getDistance', function(req, res, next){
@@ -164,9 +151,14 @@ router.get('/getDistance', function(req, res, next){
 
 router.get('/getCoordinates', function(req, res, next){
     const len = req.query.len
-    var coords = coordinates.long[len]
-    coords = coords.concat(coordinates.indirect)
-    coords = coords.concat(coordinates.direct)
+    var long = coordinates.long[len],
+        indirect = coordinates.indirect,
+        direct = coordinates.direct
+    long.map(d => d.type = 'long')
+    indirect.map(d => d.type='indirect')
+    direct.map(d => d.type='direct')
+    var coords = long.concat(indirect),
+        coords = coords.concat(direct)
     res.send(coords)
 })
 
@@ -194,7 +186,6 @@ function creatStackData(fileList, badDeps){
     })
     return stackData
 }
-
 
 // 构造力布局中的nodes和links
 function creatGraphData(badDeps){
@@ -348,7 +339,7 @@ function getFileHierachy(config) {
         root = {
             name: directory,
             type: 'dir',
-            children: []
+            children: [],
         },
         blackList = ['.DS_Store','.eslintrc.json','LICENSE','dist','bin','package.json','README.md','rollup.config.js','yarn.lock','yarn-error.log','locale','vuePackConfig.js','d3PackConfig.js']
     let id = 0
@@ -364,7 +355,7 @@ function getFileHierachy(config) {
             var curPath = path.resolve(rootPath, ele),
                 info = fs.statSync(curPath)
             if (info.isDirectory()) {
-                let tmpdir = { name: curPath, children: [], type: 'dir' }
+                let tmpdir = { name: curPath, children: [], type: 'dir'}
                 root.children.push(tmpdir)
                 readDirSync(curPath, tmpdir);
             } else {
@@ -482,14 +473,22 @@ function getDepInfo(lenThreshold, config) {
 }
 
 //返回文件的基本统计信息（文件大小、文件所包含函数、依赖和被依赖文件，坏依赖数）
-function getFileInfo({ badDeps, depMap },config) {
+function getFileInfo({ badDeps, depMap },config, fileList) {
     let directory = path.resolve(config.path, 'src'),
         blackList = ['.DS_Store','.eslintrc.json','LICENSE','dist','bin','package.json','README.md','rollup.config.js','yarn.lock','yarn-error.log','locale','vuePackConfig.js','d3PackConfig.js']
     let fileInfo = [], id = 0
     readFileSync(directory, fileInfo)
     fileInfo.forEach(d => {
-        d.fileInfo.depended = d.fileInfo.depended.length
-        d.fileInfo.depending = d.fileInfo.depending.length
+        let depended_ids = []
+        d.fileInfo.depended.forEach(item =>{
+            depended_ids.push(fileList.indexOf(item.src))
+        })
+        d.fileInfo.depended = depended_ids
+        let depending_ids = []
+        d.fileInfo.depending.forEach(item =>{
+            depending_ids.push(fileList.indexOf(item.src))
+        })
+        d.fileInfo.depending = depending_ids
         d.fileInfo.direct = d.fileInfo.direct.length
         d.fileInfo.func = d.fileInfo.func.length
         d.fileInfo.indirect = d.fileInfo.indirect.length
@@ -633,7 +632,7 @@ function extractFileDep(fpath, depMap) {
         idx = val.findIndex(d => d.src === fpath)
         if (idx !== -1) {
             depended.push({
-                src: val[idx].src,
+                src: key,
                 specifiers: val[idx].specifiers   // specifier包含type和name, type指的是import、export等, name指函数名 
             })
         }
