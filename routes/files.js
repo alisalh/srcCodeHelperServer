@@ -47,10 +47,18 @@ router.get('/', function (req, res, next) {
     res.render('index', { title: 'Express' });
 });
 
+router.get('/getDirect', function(req, res, next){
+    let direct = []
+    new_depInfo.badDeps[2].paths.forEach(path =>{
+        direct.push(path.path[0]+'|'+path.path[1])
+        direct.push(path.path[1]+'|'+path.path[0])
+    })
+    res.send(direct)
+})
+
 // 获取文件内容
 router.get('/getFileContent', function (req, res, next) {
     let fname = req.query.filename
-    console.log(fname)
     fs.readFile(fname, 'utf8', (err, data) => {
         if (err) throw err;
         res.send({ content: data })
@@ -114,17 +122,12 @@ router.get('/getPathInfoById', function (req, res, next) {
     const longNum = new_depInfo.badDeps[0].paths.length,
         indirectNum = new_depInfo.badDeps[1].paths.length
     var selectedPath
-    if(id < longNum){
-        new_depInfo.badDeps[0].paths.forEach(path =>{
-            if(path.id === id) selectedPath = path
-        })
-    }
-    if(id > longNum && id < longNum+indirectNum){
+    if(id >= longNum && id < longNum+indirectNum){
         new_depInfo.badDeps[1].paths.forEach(path =>{
             if(path.id === id) selectedPath = path
         })
     }
-    if(id > longNum+indirectNum){
+    if(id >= longNum+indirectNum){
         new_depInfo.badDeps[2].paths.forEach(path =>{
             if(path.id === id) selectedPath = path
         })
@@ -138,15 +141,11 @@ router.get('/getDistance', function(req, res, next){
 })
 
 router.get('/getCoordinates', function(req, res, next){
-    const len = req.query.len
-    var long = coordinates.long[len],
-        indirect = coordinates.indirect,
+    var indirect = coordinates.indirect,
         direct = coordinates.direct
-    long.map(d => d.type = 'long')
     indirect.map(d => d.type='indirect')
     direct.map(d => d.type='direct')
-    var coords = long.concat(indirect),
-        coords = coords.concat(direct)
+    var coords = indirect.concat(direct)
     res.send(coords)
 })
 
@@ -385,22 +384,22 @@ function getCoordinates(libName, badDeps){
         columns: true
     })
 
-    let long = {}
-    badDeps[0].paths.forEach(path => {
-        if(long[path.len])
-            long[path.len].push(coordinates[path.id])
-        else
-            long[path.len] = [coordinates[path.id]]
-    })
+    let longLength = badDeps[0].paths.length
     let indirect = []
     badDeps[1].paths.forEach(path => {
-        indirect.push(coordinates[path.id])
+        let obj = coordinates[path.id-longLength]
+        obj['id'] = parseInt(path.id)
+        obj['len'] = path.len
+        indirect.push(obj)
     })
     let direct = []
     badDeps[2].paths.forEach(path => {
-        direct.push(coordinates[path.id])
+        let obj = coordinates[path.id-longLength]
+        obj['id'] = parseInt(path.id)
+        obj['len'] = path.len
+        direct.push(obj)
     })
-    return {long: long, indirect: indirect, direct: direct}
+    return {indirect: indirect, direct: direct}
 }
 
 // 返回文件的依赖信息：三种坏依赖关系数组，依赖图的邻接表表示
