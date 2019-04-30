@@ -82,15 +82,9 @@ router.get('/getSubGraphData', function(req, res, next){
 
 // 返回stackData
 router.get('/getStackData', function(req, res, next){
-    const threshold = req.query.threshold
     var newStackData = []
     stackData.forEach(d => {
-        let long = 0
-        for(var key in d.long){
-            if(parseInt(key) >= parseInt(threshold))
-                long = long + d.long[key]
-        }
-        newStackData.push({fileid: d.fileid, long: long, indirect: d.indirect, direct: d.direct})
+        newStackData.push({fileid: d.fileid, indirect: d.indirect, direct: d.direct})
     })
     res.send(newStackData)
 })
@@ -104,16 +98,10 @@ router.get('/getLenDis', function(req, res, next){
 })
 
 router.get('/getBarData', function(req, res, next){
-    var threshold = req.query.threshold
-    let long = 0, indirect = 0, direct = 0
-    for(var key in coordinates.long){
-        if(parseInt(key) >= parseInt(threshold))
-            long = long + coordinates.long[key].length
-    }
+    let indirect = 0, direct = 0
     indirect = coordinates.indirect.length
     direct = coordinates.direct.length
     let data = []
-    data.push({type: 'long', num: long})
     data.push({type: 'indirect', num: indirect})
     data.push({type: 'direct', num: direct})
     res.send(data)
@@ -492,7 +480,6 @@ function getFileInfo({ badDeps, depMap },config, fileList) {
         d.fileInfo.direct = d.fileInfo.direct.length
         d.fileInfo.func = d.fileInfo.func.length
         d.fileInfo.indirect = d.fileInfo.indirect.length
-        d.fileInfo.long = d.fileInfo.long.length
     })
     return fileInfo
 
@@ -614,10 +601,12 @@ function extractFunc(fpath) {
 function extractBadDeps(fpath, badDeps) {
     const fileBadDeps = {}
     for (let dep of badDeps) {
-        let type = dep.type,
-            paths = dep.paths,
-            filteredDeps = paths.filter(d => d.path.indexOf(fpath) !== -1)
-        fileBadDeps[type] = filteredDeps
+        let type = dep.type
+        if(type != 'long'){
+            let paths = dep.paths,
+                filteredDeps = paths.filter(d => d.path.indexOf(fpath) !== -1)
+            fileBadDeps[type] = filteredDeps
+        } 
     }
     return fileBadDeps
 }
