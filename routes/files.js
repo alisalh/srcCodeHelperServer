@@ -31,8 +31,8 @@ const libConfig = {
     }
 }
 
-const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\vue\\src',
-    libName = 'vue',
+const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\d3\\src',
+    libName = 'd3',
     config = libConfig[libName]
 const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config, fileList),
@@ -468,12 +468,16 @@ function getFileInfo({ badDeps, depMap },config, fileList) {
     fileInfo.forEach(d => {
         let depended_ids = []
         d.fileInfo.depended.forEach(item =>{
-            depended_ids.push(fileList.indexOf(item.src))
+            let index = fileList.indexOf(item.src)
+            if(index != -1)
+                depended_ids.push(index)
         })
         d.fileInfo.depended = depended_ids
         let depending_ids = []
         d.fileInfo.depending.forEach(item =>{
-            depending_ids.push(fileList.indexOf(item.src))
+            let index = fileList.indexOf(item.src)
+            if(index != -1)
+                depending_ids.push(index)
         })
         d.fileInfo.depending = depending_ids
         d.fileInfo.direct = d.fileInfo.direct.length
