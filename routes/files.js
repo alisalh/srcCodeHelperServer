@@ -31,16 +31,18 @@ const libConfig = {
     }
 }
 
-const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\d3\\src',
-    libName = 'd3',
+const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\vue\\src',
+    libName = 'vue',
     config = libConfig[libName]
 const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config, fileList),
-    root = getFileHierachy(config), graphData = creatGraphData(new_depInfo.badDeps),
+    root = getFileHierachy(config), graphData = creatGraphData(new_depInfo.badDeps, libName, fileList),
     subGraphData = createSubGraphData(graphData), coordinates = getCoordinates(libName, new_depInfo.badDeps),
-    stackData = creatStackData(fileList, new_depInfo.badDeps)
+    stackData = creatStackData(fileList, new_depInfo.badDeps), dirs = getDirs(rootPath)
+
 // getGraph(fileList, new_depInfo.badDeps)
 // getAllPaths(new_depInfo.badDeps)
+
 console.log('finish preparing data')
 
 router.get('/', function (req, res, next) {
@@ -68,6 +70,11 @@ router.get('/getFileContent', function (req, res, next) {
 // 获取文件列表
 router.get('/getFileList', function(req, res, next){
     res.send(fileList)
+})
+
+// 获取文件夹
+router.get('/getDirs', function(req, res, next){
+    res.send(dirs)
 })
 
 // 只返回文件结构
@@ -135,6 +142,29 @@ router.get('/getPathInfoById', function (req, res, next) {
     res.send(selectedPath)
 })
 
+// 根据文件id查找经过它的坏依赖
+router.get('/getPathIdByFileId', function(req, res, next){
+    const id = parseInt(req.query.id)
+    var badIds = []
+    new_depInfo.badDeps[1].paths.forEach(path =>{
+        for(let i=0; i<path.path.length; i++){
+            if(path.path[i] === id){
+                badIds.push(path.id)
+                break
+            }       
+        }
+    })
+    new_depInfo.badDeps[2].paths.forEach(path =>{
+        for(let i=0; i<path.path.length; i++){
+            if(path.path[i] === id){
+                badIds.push(path.id)
+                break
+            }       
+        }
+    })
+    res.send(badIds)
+})
+
 router.get('/getDistance', function(req, res, next){
     var fileDist = getDistance(libName)
     res.send(fileDist)
@@ -175,7 +205,7 @@ function creatStackData(fileList, badDeps){
 }
 
 // 构造力布局中的nodes和links
-function creatGraphData(badDeps){
+function creatGraphData(badDeps, libName, fileList){
     var depData = []
       let longPaths = badDeps[0].paths,
         indirectPaths = badDeps[1].paths,
@@ -208,7 +238,11 @@ function creatGraphData(badDeps){
         nodes.add(d.path[d.path.length - 1]) // do not miss the last node
       })
       var graphData = {}
-      graphData.nodes = [...nodes].map(d => ({ fileid: parseInt(d) }))
+      graphData.nodes = [...nodes].map(d => ({ 
+        fileid: parseInt(d),
+        filename: fileList[parseInt(d)].substr(fileList[parseInt(d)].lastIndexOf('\\')+1),
+        dir: fileList[parseInt(d)].split('\\')[7]
+      }))
       graphData.links = [...links].map(function(d) {
       let parts = d.split('|')
         return { source: parseInt(parts[0]), target: parseInt(parts[1]) }
@@ -279,11 +313,11 @@ function getAllPaths(badDeps){
     badDeps.forEach(deps => {
         // 长依赖无环
         if(deps.type === 'long'){
-            deps.paths.forEach(d => {
-                for(let i=0; i<d.path.length; i++)
-                    fGraphWrite.write(d.path[i]+' ')
-                fGraphWrite.write('\n')  
-            }) 
+            // deps.paths.forEach(d => {
+            //     for(let i=0; i<d.path.length; i++)
+            //         fGraphWrite.write(d.path[i]+' ')
+            //     fGraphWrite.write('\n')  
+            // }) 
         }
         else{
             deps.paths.forEach(d => {
@@ -318,6 +352,17 @@ function getAllFiles(rootPath) {
         })
     }
     return fileList
+}
+
+//获取外层文件夹
+function getDirs(rootPath){
+    let blackList = ['vuePackConfig.js'], dirs = []
+    var pa = fs.readdirSync(rootPath)
+    pa.forEach(function(ele, index){
+        if(blackList.indexOf(ele) !== -1) return
+        dirs.push(ele)
+    })
+    return dirs
 }
 
 // 返回文件夹的层次结构
@@ -531,20 +576,22 @@ function filterSamePaths(depInfo, fileList){
             lenDis[path.length]--
     }
     for(let i=0; i<origin_indirect.length; i++){
-        let path = []
+        let path = [], temp = []
         for(let j=0; j<origin_indirect[i].path.length; j++){
             path.push(fileList.indexOf(origin_indirect[i].path[j]))
+            temp.push(fileList.indexOf(origin_indirect[i].path[j]))
         }
-        if(!indirect_map[path.toString()])
-            indirect_map[path.toString()] = path
+        if(!indirect_map[temp.sort().toString()])
+            indirect_map[temp.toString()] = path
     }
     for(let i=0; i<origin_direct.length; i++){
-        let path = []
+        let path = [], temp = []
         for(let j=0; j<origin_direct[i].path.length; j++){
             path.push(fileList.indexOf(origin_direct[i].path[j]))
+            temp.push(fileList.indexOf(origin_direct[i].path[j]))
         }
-        if(!direct_map[path.toString()])
-            direct_map[path.toString()] = path
+        if(!direct_map[temp.sort().toString()])
+            direct_map[temp.toString()] = path
     }
     let maxLen = Object.values(long_map).slice().sort((a, b) => b.length - a.length)[0].length
     return {
