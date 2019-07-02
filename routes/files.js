@@ -142,7 +142,36 @@ router.get('/getPathInfoById', function (req, res, next) {
             })
         }
     }
-    res.send(selectedPath)
+    let subIDs = []
+    // 只有一条路径时, 获取每个节点的子路径信息
+    if(ids.length === 1 && selectedPath[0].type === 'indirect'){
+        let subpath = []
+        let selectPath = selectedPath[0].path
+        for(let i=1; i<selectPath.length-1; i++){
+            subpath.push(selectPath[i-1]+'|'+selectPath[i]+'|'+selectPath[i+1])
+            subIDs.push({fileid: selectPath[i], ids: []})
+        }
+        subpath.push(selectPath[selectPath.length-2]+'|'+selectPath[selectPath.length-1]+'|'+selectPath[0])
+        subpath.push(selectPath[selectPath.length-1]+'|'+selectPath[0]+'|'+selectPath[1])
+        subIDs.push({fileid: selectPath[0], ids: []})
+        subIDs.push({fileid: selectPath[selectPath.length-1], ids: []})
+        new_depInfo.badDeps[1].paths.forEach(item =>{
+            if(item.id === selectedPath[0].id) return
+            let path = item.path
+            for(let i=1; i<path.length-1; i++){
+                if(subpath.indexOf(path[i-1]+'|'+path[i]+'|'+path[i+1]) != -1){
+                    subIDs.filter(d => d.fileid === path[i])[0].ids.push(item.id)
+                }
+            }
+            if(subpath.indexOf(path[path.length-2]+'|'+path[path.length-1]+'|'+path[0]) != -1){
+                subIDs.filter(d => d.fileid === path[path.length-1])[0].ids.push(item.id)
+            }
+            if(subpath.indexOf(path[path.length-1]+'|'+path[0]+'|'+path[1]) != -1){
+                subIDs.filter(d => d.fileid === path[0])[0].ids.push(item.id)
+            }
+        })
+    }
+    res.send({subPaths: selectedPath, subIDs: subIDs})
 })
 
 // 根据文件id查找经过它的坏依赖
