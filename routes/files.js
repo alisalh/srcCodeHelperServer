@@ -125,19 +125,22 @@ router.get('/getBarData', function(req, res, next){
 
 // 根据依赖id查找该依赖的细节信息
 router.get('/getPathInfoById', function (req, res, next) {
-    const id = parseInt(req.query.id)
+    var ids = req.query.ids
     const longNum = new_depInfo.badDeps[0].paths.length,
         indirectNum = new_depInfo.badDeps[1].paths.length
-    var selectedPath
-    if(id >= longNum && id < longNum+indirectNum){
-        new_depInfo.badDeps[1].paths.forEach(path =>{
-            if(path.id === id) selectedPath = path
-        })
-    }
-    if(id >= longNum+indirectNum){
-        new_depInfo.badDeps[2].paths.forEach(path =>{
-            if(path.id === id) selectedPath = path
-        })
+    var selectedPath = []
+    for(let i=0; i<ids.length; i++){
+        ids[i] = parseInt(ids[i])
+        if(ids[i] >= longNum && ids[i] < longNum+indirectNum){
+            new_depInfo.badDeps[1].paths.forEach(path =>{
+                if(path.id === ids[i]) selectedPath.push(path)
+            })
+        }
+        if(ids[i] >= longNum+indirectNum){
+            new_depInfo.badDeps[2].paths.forEach(path =>{
+                if(path.id === ids[i]) selectedPath.push(path)
+            })
+        }
     }
     res.send(selectedPath)
 })
