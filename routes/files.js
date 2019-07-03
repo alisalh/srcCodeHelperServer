@@ -31,8 +31,8 @@ const libConfig = {
     }
 }
 
-const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\vue\\src',
-    libName = 'vue',
+const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\d3\\src',
+    libName = 'd3',
     config = libConfig[libName]
 const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config, fileList),
@@ -142,11 +142,9 @@ router.get('/getPathInfoById', function (req, res, next) {
             })
         }
     }
-    let subIDs = []
-    // 只有一条路径时, 获取每个节点的子路径信息
+    let subIDs = [], selectPath = selectedPath[0].path
     if(ids.length === 1 && selectedPath[0].type === 'indirect'){
         let subpath = []
-        let selectPath = selectedPath[0].path
         for(let i=1; i<selectPath.length-1; i++){
             subpath.push(selectPath[i-1]+'|'+selectPath[i]+'|'+selectPath[i+1])
             subIDs.push({fileid: selectPath[i], ids: []})
@@ -169,6 +167,16 @@ router.get('/getPathInfoById', function (req, res, next) {
             if(subpath.indexOf(path[path.length-1]+'|'+path[0]+'|'+path[1]) != -1){
                 subIDs.filter(d => d.fileid === path[0])[0].ids.push(item.id)
             }
+        })
+    }
+    if(ids.length === 1 && selectedPath[0].type === 'direct'){
+        subIDs.push({fileid: selectPath[0], ids: []})
+        subIDs.push({fileid: selectPath[1], ids: []})
+        new_depInfo.badDeps[2].paths.forEach(item =>{
+            if(item.id === selectedPath[0].id) return
+            let path = item.path
+            if(path[0] === selectPath[0]) subIDs[0].ids.push(item.id)
+            if(path[1] === selectPath[1]) subIDs[1].ids.push(item.id)
         })
     }
     res.send({subPaths: selectedPath, subIDs: subIDs})
