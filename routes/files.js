@@ -38,7 +38,8 @@ const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config, fileList),
     root = getFileHierachy(config), graphData = creatGraphData(new_depInfo.badDeps, libName, fileList),
     subGraphData = createSubGraphData(graphData), coordinates = getCoordinates(libName, new_depInfo.badDeps),
-    stackData = creatStackData(fileList, new_depInfo.badDeps), dirs = getDirs(rootPath)
+    stackData = creatStackData(fileList, new_depInfo.badDeps), dirs = getDirs(rootPath),
+    referenceName = getReferenceName(new_depInfo, fileList)
 
 // getGraph(fileList, new_depInfo.badDeps)
 // getAllPaths(new_depInfo.badDeps)
@@ -219,6 +220,26 @@ router.get('/getCoordinates', function(req, res, next){
     res.send(coords)
 })
 
+router.get('/getReferenceName', function(req, res, next){
+    res.send(referenceName)
+})
+
+function getReferenceName(depInfo, fileList){
+    let depMap = depInfo.depMap
+    let referenceNames = []
+    fileList.forEach(file =>{
+        let referencedFile = depMap[file], referenceName = []
+        if(referencedFile){
+             referencedFile.forEach(rfile =>{
+                if(rfile.referenceName)
+                    rfile.referenceName.forEach(name => referenceName.push(name))  
+            })
+        }
+        referenceNames.push({filename: file, referenceName: referenceName})
+    })
+    return referenceNames
+}
+
 function creatStackData(fileList, badDeps){
     var stackData = []
     fileList.forEach((file, i) => {
@@ -396,7 +417,7 @@ function getAllFiles(rootPath) {
 
 //获取外层文件夹
 function getDirs(rootPath){
-    let blackList = ['vuePackConfig.js'], dirs = []
+    let blackList = ['vuePackConfig.js', 'd3PackConfig.js'], dirs = []
     var pa = fs.readdirSync(rootPath)
     pa.forEach(function(ele, index){
         if(blackList.indexOf(ele) !== -1) return
@@ -417,7 +438,7 @@ function getFileHierachy(config) {
     let id = 0
     readDirSync(directory, root)
     let depth = getTreeDepth(root)
-    equalizeDepth(root, depth)
+    // equalizeDepth(root, depth)
     return root
 
     function readDirSync(rootPath, root) {
