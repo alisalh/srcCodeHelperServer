@@ -31,8 +31,8 @@ const libConfig = {
     }
 }
 
-const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\d3\\src',
-    libName = 'd3',
+const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\vue\\src',
+    libName = 'vue',
     config = libConfig[libName]
 const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config, fileList),
@@ -231,8 +231,10 @@ function getReferenceName(depInfo, fileList){
         let referencedFile = depMap[file], referenceName = []
         if(referencedFile){
              referencedFile.forEach(rfile =>{
+                let rname = {}
                 if(rfile.referenceName)
-                    rfile.referenceName.forEach(name => referenceName.push(name))  
+                    rname[rfile.src] = rfile.referenceName
+                referenceName.push(rname)
             })
         }
         referenceNames.push({filename: file, referenceName: referenceName})
