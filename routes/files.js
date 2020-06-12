@@ -31,8 +31,8 @@ const libConfig = {
     }
 }
 
-const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\vue\\src',
-    libName = 'vue',
+const rootPath = 'E:\\Workspace\\Visualization\\srcCodeHelperServer\\data\\d3\\src',
+    libName = 'd3',
     config = libConfig[libName]
 const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     new_depInfo = filterSamePaths(depInfo, fileList), fileInfo = getFileInfo(new_depInfo, config, fileList),
@@ -40,9 +40,6 @@ const fileList = getAllFiles(rootPath), depInfo = getDepInfo(0, config),
     subGraphData = createSubGraphData(graphData), coordinates = getCoordinates(libName, new_depInfo.badDeps),
     stackData = creatStackData(fileList, new_depInfo.badDeps), dirs = getDirs(rootPath),
     referenceName = getReferenceName(new_depInfo, fileList)
-
-// getGraph(fileList, new_depInfo.badDeps)
-// getAllPaths(new_depInfo.badDeps)
 
 console.log('finish preparing data')
 
